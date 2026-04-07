@@ -1,0 +1,38 @@
+{
+  "llm_provider": {
+    "description": "LLM 提供商",
+    "type": "string",
+    "hint": "用于任务识别和信息提取的 LLM 提供商 ID",
+    "default": "default"
+  },
+  "schedule_detection_llm": {
+    "description": "日程检测专用LLM提供商",
+    "type": "string",
+    "hint": "选择用于判断是否为日程设定请求的LLM提供商（可选，留空则使用主LLM）",
+    "_special": "select_provider"
+  },
+  "max_tasks_per_user": {
+    "description": "每用户最大任务数",
+    "type": "int",
+    "hint": "限制每个用户最多可以创建的任务数量",
+    "default": 50
+  },
+  "enable_personality": {
+    "description": "启用人格化回复",
+    "type": "bool",
+    "hint": "是否使用人格化设定生成回复消息",
+    "default": true
+  },
+  "webui_port": {
+    "description": "WebUI端口",
+    "type": "int",
+    "default": 5001,
+    "hint": "后台管理界面的端口号"
+  },
+  "server_key": {
+    "description": "WebUI登录密钥",
+    "type": "string",
+    "default": "",
+    "hint": "后台管理界面的登录密钥，留空则自动生成"
+  }
+}
