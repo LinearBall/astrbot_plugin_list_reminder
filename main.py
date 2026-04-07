@@ -203,17 +203,45 @@ class TaskManager:
         logger.info(f"加载了 {loaded} 个待执行任务")
 
     async def get_tasks(self, target_id: str) -> list[dict]:
-        """获取任务（按需读取文件）"""
+        """获取任务（按需读取文件），自动标记过期任务为已完成"""
+        now = datetime.now()
+        changed = False
         user_file = self.users_dir / f"user_{target_id}.json"
         if user_file.exists():
             with open(user_file, "r", encoding="utf-8") as f:
-                return json.load(f).get("tasks", [])
+                data = json.load(f)
+                tasks = data.get("tasks", [])
+                # 自动标记过期任务为已完成
+                for task in tasks:
+                    if not task.get("completed"):
+                        try:
+                            task_time = datetime.fromisoformat(task["time"])
+                            if task_time <= now:
+                                task["completed"] = True
+                                changed = True
+                        except Exception:
+                            pass
+                # 如果有变更，保存
+                if changed:
+                    with open(user_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False)
+                return tasks
         return []
 
     async def create_task(self, target_id: str, is_group: bool, content: str,
                         task_time: str, creator: str, umo: str) -> str | None:
         """创建任务"""
         task_id = f"{target_id}_{int(time.time())}"
+
+        # 检查时间是否已过期
+        try:
+            task_time_dt = datetime.fromisoformat(task_time)
+            if task_time_dt <= datetime.now():
+                logger.warning(f"任务时间已过期: {task_time}")
+                return None
+        except Exception:
+            logger.error(f"时间格式错误: {task_time}")
+            return None
 
         task = {
             "id": task_id,

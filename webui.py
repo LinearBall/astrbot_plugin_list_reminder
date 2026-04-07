@@ -426,11 +426,8 @@ async def create_task():
         with open(file, "w", encoding="utf-8") as f:
             json.dump(task_data, f, ensure_ascii=False)
 
-        # 如果有task_manager引用，也启动定时器
-        if _task_manager_ref:
-            await _task_manager_ref.start_timer(task)
-
-        return jsonify({"success": True, "message": "任务创建成功"})
+        # 任务已保存到文件，重启AstrBot后会自动加载定时器
+        return jsonify({"success": True, "message": "任务创建成功，重启AstrBot后生效"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
