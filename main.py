@@ -12,6 +12,11 @@ from astrbot.core.message.message_event_result import MessageChain
 
 from .webui import start_server
 
+
+def _run_webui_worker(config, task_manager):
+    """WebUI工作进程入口"""
+    asyncio.run(start_server(config, task_manager))
+
 # 配置
 PLUGIN_DIR = Path(__file__).parent.absolute()
 DATA_DIR = PLUGIN_DIR / "data"
@@ -92,10 +97,7 @@ class ListReminderPlugin(Star):
             self.server_key = secrets.token_urlsafe(16)
 
         # 在新进程中运行webui（Windows子线程signal处理有问题）
-        def run_webui():
-            asyncio.run(start_server(self.config, self.task_manager))
-
-        self.webui_process = Process(target=run_webui, daemon=True)
+        self.webui_process = Process(target=_run_webui_worker, args=(self.config, self.task_manager), daemon=True)
         self.webui_process.start()
 
         yield event.plain_result(f"✅ 后台管理界面已启动\n访问地址: http://localhost:{self.webui_port}\n登录密钥: {self.server_key}")
