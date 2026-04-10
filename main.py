@@ -3,7 +3,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from threading import Thread
+from multiprocessing import Process
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -36,7 +36,7 @@ class ListReminderPlugin(Star):
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
 
         # WebUI
-        self.webui_thread = None
+        self.webui_process = None
         self.server_key = None
         self.webui_port = self.config.get("webui_port", 5001)
 
@@ -81,7 +81,7 @@ class ListReminderPlugin(Star):
     @reminder_commands.command("后台")
     async def open_webui(self, event: AstrMessageEvent):
         """开启后台管理界面"""
-        if self.webui_thread and self.webui_thread.is_alive():
+        if self.webui_process and self.webui_process.is_alive():
             yield event.plain_result(f"⚠️ 后台管理界面已在运行中\n访问地址: http://localhost:{self.webui_port}\n登录密钥: {self.server_key}")
             return
 
@@ -91,12 +91,12 @@ class ListReminderPlugin(Star):
             import secrets
             self.server_key = secrets.token_urlsafe(16)
 
-        # 在新线程中运行webui
+        # 在新进程中运行webui（Windows子线程signal处理有问题）
         def run_webui():
             asyncio.run(start_server(self.config, self.task_manager))
 
-        self.webui_thread = Thread(target=run_webui, daemon=True)
-        self.webui_thread.start()
+        self.webui_process = Process(target=run_webui, daemon=True)
+        self.webui_process.start()
 
         yield event.plain_result(f"✅ 后台管理界面已启动\n访问地址: http://localhost:{self.webui_port}\n登录密钥: {self.server_key}")
 
