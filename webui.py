@@ -18,10 +18,7 @@ from quart import (
 
 from astrbot.api import logger
 
-from .main import (  # 从 main.py 中读取 USERS_DIR 和 GROUPS_DIR，确保数据目录一致
-    GROUPS_DIR,
-    USERS_DIR,
-)
+from .config import GROUPS_DIR, USERS_DIR
 
 app = Quart(__name__)
 

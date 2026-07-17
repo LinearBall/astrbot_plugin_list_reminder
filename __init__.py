@@ -1,3 +1,4 @@
 from .main import ListReminderPlugin
-__version__ = "1.1.0"
+# __version__从yaml文件中读取版本号
+
 __all__ = ["ListReminderPlugin"]
