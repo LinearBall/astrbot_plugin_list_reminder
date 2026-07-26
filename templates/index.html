@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -15,8 +15,8 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
 .card { background: #fff; border-radius: 6px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
 .card h2 { font-size: 16px; margin-bottom: 12px; border-bottom: 2px solid #1677ff; padding-bottom: 6px; }
 .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.form-row label { min-width: 60px; line-height: 32px; font-size: 13px; color: #555; }
-.form-row input, .form-row select, .form-row textarea { flex: 1; min-width: 150px; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
+.form-row label { min-width: 80px; line-height: 32px; font-size: 13px; color: #555; }
+.form-row input, .form-row textarea { flex: 1; min-width: 150px; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
 .form-row textarea { min-height: 56px; resize: vertical; }
 .form-row button { padding: 7px 20px; background: #1677ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
 .form-row button:hover { background: #4096ff; }
@@ -49,17 +49,12 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
 <div class="card">
 <h2>创建任务</h2>
 <div class="form-row">
-<label>类型</label>
-<select id="task_type">
-<option value="user">用户</option>
-<option value="group">群组</option>
-</select>
-<label>target_id</label>
-<input id="target_id" placeholder="用户/群组 ID">
+<label>sender_id</label>
+<input id="sender_id" placeholder="发送者 ID（任务归属）">
+<label>umo</label>
+<input id="umo" placeholder="session_id（用于发送提醒，可选）">
 </div>
 <div class="form-row">
-<label>umo</label>
-<input id="umo" placeholder="session_id（群组必填，含平台前缀）">
 <label>提醒时间</label>
 <input id="task_time" type="datetime-local">
 </div>
@@ -68,19 +63,15 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
 <textarea id="task_content" placeholder="提醒内容"></textarea>
 </div>
 <div class="form-row">
-<span class="hint">群组任务必须填写完整 session_id（umo），格式如 aiocqhttp:GroupMessage:123456</span>
+<span class="hint">umo 留空则使用 sender_id 作为发送目标。</span>
 </div>
 <div class="form-row">
 <button type="button" id="create_btn">创建任务</button>
 </div>
 </div>
 <div class="card">
-<h2>用户任务</h2>
-<div id="user_tasks"><div class="empty">加载中...</div></div>
-</div>
-<div class="card">
-<h2>群组任务</h2>
-<div id="group_tasks"><div class="empty">加载中...</div></div>
+<h2>所有任务</h2>
+<div id="task_list"><div class="empty">加载中...</div></div>
 </div>
 </div>
 <script>
@@ -104,15 +95,14 @@ async function loadTasks() {
     const r = await fetch("/api/tasks");
     if (r.status === 401) { window.location.href = "/login"; return; }
     const d = await r.json();
-    renderList("user_tasks", d.user_tasks || [], "user");
-    renderList("group_tasks", d.group_tasks || [], "group");
+    renderList(d.tasks || []);
   } catch (e) {
     showMsg("加载失败: " + e.message, "error");
   }
 }
 
-function renderList(elId, tasks, type) {
-  const el = document.getElementById(elId);
+function renderList(tasks) {
+  const el = document.getElementById("task_list");
   if (!tasks.length) { el.innerHTML = `<div class="empty">暂无任务</div>`; return; }
   let h = "";
   for (const t of tasks) {
@@ -122,8 +112,7 @@ function renderList(elId, tasks, type) {
     h += `<div class="task-content">${esc(t.content)}</div>`;
     h += `<div class="task-meta">`;
     h += `<span>ID: ${esc(t.task_id || "")}</span>`;
-    h += `<span>类型: ${esc(t.type)}</span>`;
-    h += `<span>target: ${esc(t.target_id || "")}</span>`;
+    h += `<span>sender: ${esc(t.sender_id || "")}</span>`;
     if (t.umo) h += `<span>umo: ${esc(t.umo)}</span>`;
     h += `<span>时间: ${esc(t.time)}</span>`;
     h += `<span>${t.completed ? "已完成" : "待提醒"}</span>`;
@@ -136,17 +125,16 @@ function renderList(elId, tasks, type) {
 }
 
 async function createTask() {
-  const type = document.getElementById("task_type").value;
-  const target_id = document.getElementById("target_id").value.trim();
+  const sender_id = document.getElementById("sender_id").value.trim();
   const umo = document.getElementById("umo").value.trim();
   const time = document.getElementById("task_time").value;
   const content = document.getElementById("task_content").value.trim();
-  if (!target_id || !content || !time) { showMsg("请填写 target_id、内容和时间", "error"); return; }
+  if (!sender_id || !content || !time) { showMsg("请填写 sender_id、内容和时间", "error"); return; }
   try {
     const r = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: type, target_id: target_id, umo: umo, time: time, content: content })
+      body: JSON.stringify({ sender_id: sender_id, umo: umo, time: time, content: content })
     });
     const d = await r.json();
     if (d.success) { showMsg(d.message, "success"); loadTasks(); }

@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import re
 import threading
@@ -14,7 +14,7 @@ from astrbot.api.star import Context, Star, register
 from astrbot.core.message.message_event_result import MessageChain
 
 from . import webui
-from .config import GROUPS_DIR, USERS_DIR
+from .config import USERS_DIR
 
 
 def _run_webui_worker(config, task_manager):
@@ -24,12 +24,12 @@ def _run_webui_worker(config, task_manager):
 
 @register("list_reminder", "LinearBall", "智能列表式任务管理插件", "1.1.1")
 class ListReminderPlugin(Star):
-    """智能任务管理插件 - 支持用户和群组任务"""
+    """智能任务管理插件"""
 
     def __init__(self, context: Context, config: dict):
         super().__init__(context)
         self.config = config or {}
-        self.task_manager = TaskManager(USERS_DIR, GROUPS_DIR, self.context)
+        self.task_manager = TaskManager(USERS_DIR, self.context)
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.llm_provider_id = self.config.get("llm_provider_id")
@@ -42,7 +42,6 @@ class ListReminderPlugin(Star):
 
         # 设置task_manager引用到webui
         webui.set_task_manager(self.task_manager)
-
 
     async def initialize(self):
         """插件初始化"""
@@ -62,7 +61,7 @@ class ListReminderPlugin(Star):
     @reminder_commands.command("列表")
     async def list_tasks(self, event: AstrMessageEvent):
         """列出任务"""
-        user_id = event.unified_msg_origin
+        user_id = event.get_sender_id()
         tasks = await self.task_manager.get_tasks(user_id)
 
         if not tasks:
@@ -79,7 +78,7 @@ class ListReminderPlugin(Star):
     @reminder_commands.command("清空")
     async def clear_tasks(self, event: AstrMessageEvent):
         """清空所有任务"""
-        user_id = event.unified_msg_origin
+        user_id = event.get_sender_id()
         await self.task_manager.clear_tasks(user_id)
         yield event.plain_result("🗑️ 任务列表已清空")
 
@@ -122,10 +121,7 @@ class ListReminderPlugin(Star):
         if not await self._is_reminder_intent(msg, event):
             return
 
-        # 确定目标ID（用户或群组）
-        group_id = event.get_group_id()
-        target_id = group_id if group_id else event.unified_msg_origin
-        is_group = bool(group_id)
+        sender_id = event.get_sender_id()
 
         # 使用LLM提取任务信息
         task_info = await self._extract_task(msg, event)
@@ -137,11 +133,10 @@ class ListReminderPlugin(Star):
 
         # 创建任务
         task_id = await self.task_manager.create_task(
-            target_id=target_id,
-            is_group=is_group,
+            sender_id=sender_id,
             content=task_info["content"],
             task_time=task_info["time"],
-            creator=event.session_id,
+            creator=event.get_sender_id(),
             umo=event.unified_msg_origin,
         )
 
@@ -168,20 +163,22 @@ class ListReminderPlugin(Star):
 
             system_prompt = (
                 "判断用户消息是否是在设定提醒、任务或日程安排。"
-                "返回 true 或 false\n\n"
+                "返回 true 或 false\n"
                 "示例：\n"
                 "消息：提醒我明天下午3点开会\n"
-                "true\n\n"
+                "true\n"
                 "消息：后天上午10点记得交报告\n"
-                "true\n\n"
+                "true\n"
                 "消息：安排下周一早上9点半的团队会议\n"
-                "true\n\n"
+                "true\n"
+                "消息：提醒我等下吃饭\n"
+                "true\n"
                 "消息：别忘了吃饭\n"
-                "false\n\n"
+                "false\n"
                 "消息：今天天气怎么样\n"
-                "false\n\n"
+                "false\n"
                 "消息：帮我查一下快递\n"
-                "false\n\n"
+                "false\n"
                 "仅返回 true 或 false。"
             )
 
@@ -227,8 +224,14 @@ class ListReminderPlugin(Star):
 
             # 为 few-shot 示例计算示例日期
             tomorrow = now + timedelta(days=1)
-            day_after = now + timedelta(days=2)
             next_monday = now + timedelta(days=(7 - now.weekday()))
+            half_hour_later = now + timedelta(minutes=30)
+            # 情人节示例：找下一个 2/14
+            valentines = now.replace(
+                month=2, day=14, hour=9, minute=0, second=0, microsecond=0
+            )
+            if valentines <= now:
+                valentines = valentines.replace(year=now.year + 1)
 
             system_prompt = (
                 f"你是一个日程解析助手。当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -237,15 +240,25 @@ class ListReminderPlugin(Star):
                 '{"content": "任务内容简述", "date_str": "2026-07-11T15:00:00"}\n\n'
                 "规则：\n"
                 "- content：任务内容，简洁明了。\n"
-                "- date_str：提醒时间，ISO 格式（基于上方当前时间换算）。如果用户没有指定时间，设为空字符串。\n"
-                "- 如果用户说「明天」、「后天」、「下周一」、「X小时后」等相对时间，基于当前时间计算绝对日期。\n\n"
+                "- date_str：提醒时间，ISO 格式（基于上方当前时间换算）。\n"
+                "- 如果用户只指定了日期而没有指定具体时间，date_str 设为当天早上 09:00:00。\n"
+                "- 如果用户完全没有提到时间（只说了要提醒的内容），date_str 设为当前时间的半小时后。\n"
+                "- 如果用户说「明天」、「后天」、「下周一」、「X小时后」等相对时间，基于当前时间计算绝对日期。\n"
+                "- 如果用户只说「周一」、「周六」等星期几，指的是从当前时间起最近一次即将到来的那个星期几。\n"
+                "- 如果用户说「情人节」、「愚人节」、「端午节」、「中秋节」等节日名，指的是从当前时间起最近一次即将到来的该节日；无法确定具体日期时，date_str 返回空字符串。\n\n"
                 "示例：\n"
                 f"消息：提醒我明天下午3点开会\n"
                 f'{{"content": "开会", "date_str": "{tomorrow.strftime("%Y-%m-%dT15:00:00")}"}}\n\n'
-                f"消息：后天上午10点记得交报告\n"
-                f'{{"content": "交报告", "date_str": "{day_after.strftime("%Y-%m-%dT10:00:00")}"}}\n\n'
                 f"消息：安排下周一早上9点半的团队会议\n"
                 f'{{"content": "团队会议", "date_str": "{next_monday.strftime("%Y-%m-%dT09:30:00")}"}}\n\n'
+                f"消息：明天提醒我交作业\n"
+                f'{{"content": "交作业", "date_str": "{tomorrow.strftime("%Y-%m-%dT09:00:00")}"}}\n\n'
+                f"消息：提醒我买牛奶\n"
+                f'{{"content": "买牛奶", "date_str": "{half_hour_later.strftime("%Y-%m-%dT%H:%M:%S")}"}}\n\n'
+                f"消息：周一提醒我去健身\n"
+                f'{{"content": "去健身", "date_str": "{next_monday.strftime("%Y-%m-%dT09:00:00")}"}}\n\n'
+                f"消息：提醒我情人节记得订花\n"
+                f'{{"content": "订花", "date_str": "{valentines.strftime("%Y-%m-%dT09:00:00")}"}}\n\n'
                 "仅返回 JSON，不要其他内容。"
             )
 
@@ -273,6 +286,7 @@ class ListReminderPlugin(Star):
             content = result.get("content", "").strip()
             date_str = result.get("date_str", "").strip()
 
+            # 如果没有内容或日期返回空值。防御性编程。
             if not content or not date_str:
                 return {"content": content, "time": ""}
 
@@ -302,9 +316,8 @@ class ListReminderPlugin(Star):
 class TaskManager:
     """任务管理器 - 极简实现"""
 
-    def __init__(self, users_dir: Path, groups_dir: Path, context: Context):
+    def __init__(self, users_dir: Path, context: Context):
         self.users_dir = users_dir
-        self.groups_dir = groups_dir
         self.context = context
         self.active_timers: dict[str, asyncio.Task] = {}  # 只存活跃定时器
 
@@ -315,29 +328,18 @@ class TaskManager:
             raw = raw.replace(ch, "_")
         return raw
 
+    def _task_file(self, sender_id: str) -> Path:
+        """Get the task file path for a sender."""
+        return self.users_dir / f"{self._sanitize_id(sender_id)}.json"
+
     async def load_pending_tasks(self):
         """加载待执行任务（只加载未过期的）"""
         now = datetime.now()
         loaded = 0
 
-        # 扫描用户任务
-        for user_file in self.users_dir.glob("user_*.json"):
+        for task_file in self.users_dir.glob("*.json"):
             try:
-                with open(user_file, encoding="utf-8") as f:
-                    data = json.load(f)
-                    for task in data.get("tasks", []):
-                        if not task.get("completed"):
-                            task_time = datetime.fromisoformat(task["time"])
-                            if task_time > now:
-                                await self.start_timer(task)
-                                loaded += 1
-            except Exception:
-                pass
-
-        # 扫描群组任务
-        for group_file in self.groups_dir.glob("group_*.json"):
-            try:
-                with open(group_file, encoding="utf-8") as f:
+                with open(task_file, encoding="utf-8") as f:
                     data = json.load(f)
                     for task in data.get("tasks", []):
                         if not task.get("completed"):
@@ -350,13 +352,13 @@ class TaskManager:
 
         logger.info(f"加载了 {loaded} 个待执行任务")
 
-    async def get_tasks(self, target_id: str) -> list[dict]:
+    async def get_tasks(self, sender_id: str) -> list[dict]:
         """获取任务（按需读取文件），自动标记过期任务为已完成"""
         now = datetime.now()
         changed = False
-        user_file = self.users_dir / f"user_{self._sanitize_id(target_id)}.json"
-        if user_file.exists():
-            with open(user_file, encoding="utf-8") as f:
+        file = self._task_file(sender_id)
+        if file.exists():
+            with open(file, encoding="utf-8") as f:
                 data = json.load(f)
                 tasks = data.get("tasks", [])
                 # 自动标记过期任务为已完成
@@ -371,22 +373,21 @@ class TaskManager:
                             pass
                 # 如果有变更，保存
                 if changed:
-                    with open(user_file, "w", encoding="utf-8") as f:
+                    with open(file, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False)
                 return tasks
         return []
 
     async def create_task(
         self,
-        target_id: str,
-        is_group: bool,
+        sender_id: str,
         content: str,
         task_time: str,
         creator: str,
         umo: str,
     ) -> str | None:
         """创建任务"""
-        task_id = f"{target_id}_{int(time.time())}"
+        task_id = f"{sender_id}_{int(time.time())}"
 
         # 检查时间是否已过期
         try:
@@ -400,22 +401,17 @@ class TaskManager:
 
         task = {
             "id": task_id,
-            "target_id": target_id,
+            "sender_id": sender_id,
             "time": task_time,
             "content": content,
             "creator": creator,
             "umo": umo,
             "created_at": datetime.now().isoformat(),
             "completed": False,
-            "is_group": is_group,
         }
 
         # 保存到文件
-        if is_group:
-            file = self.groups_dir / f"group_{self._sanitize_id(target_id)}.json"
-        else:
-            file = self.users_dir / f"user_{self._sanitize_id(target_id)}.json"
-
+        file = self._task_file(sender_id)
         data = {"tasks": []}
         if file.exists():
             with open(file, encoding="utf-8") as f:
@@ -464,13 +460,7 @@ class TaskManager:
 
     async def _mark_completed(self, task: dict):
         """标记任务完成"""
-        if task["is_group"]:
-            file = (
-                self.groups_dir / f"group_{self._sanitize_id(task['target_id'])}.json"
-            )
-        else:
-            file = self.users_dir / f"user_{self._sanitize_id(task['target_id'])}.json"
-
+        file = self._task_file(task["sender_id"])
         if file.exists():
             with open(file, encoding="utf-8") as f:
                 data = json.load(f)
@@ -483,15 +473,15 @@ class TaskManager:
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False)
 
-    async def clear_tasks(self, target_id: str):
+    async def clear_tasks(self, sender_id: str):
         """清空任务"""
-        user_file = self.users_dir / f"user_{self._sanitize_id(target_id)}.json"
-        if user_file.exists():
-            with open(user_file, "w", encoding="utf-8") as f:
+        file = self._task_file(sender_id)
+        if file.exists():
+            with open(file, "w", encoding="utf-8") as f:
                 json.dump({"tasks": []}, f, ensure_ascii=False)
 
         # 取消相关定时器
-        to_cancel = [tid for tid in self.active_timers if tid.startswith(target_id)]
+        to_cancel = [tid for tid in self.active_timers if tid.startswith(sender_id)]
         for tid in to_cancel:
             self.active_timers[tid].cancel()
             del self.active_timers[tid]

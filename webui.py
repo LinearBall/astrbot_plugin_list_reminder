@@ -18,7 +18,7 @@ from quart import (
 
 from astrbot.api import logger
 
-from .config import GROUPS_DIR, USERS_DIR
+from .config import USERS_DIR
 
 app = Quart(__name__)
 
@@ -36,9 +36,12 @@ def set_task_manager(task_manager):
 # --- Task file helpers (read/write per request, no caching) ---
 
 
-def _task_file(is_group: bool, target_id: str) -> Path:
-    name = f"group_{target_id}.json" if is_group else f"user_{target_id}.json"
-    return (GROUPS_DIR if is_group else USERS_DIR) / name
+def _task_file(sender_id: str) -> Path:
+    """Get the task file path for a sender_id (sanitized)."""
+    safe = sender_id
+    for ch in ("<", ">", ":", '"', "/", "\\", "|", "?", "*"):
+        safe = safe.replace(ch, "_")
+    return USERS_DIR / f"{safe}.json"
 
 
 def _load_tasks(file_path: Path) -> list:
@@ -57,13 +60,9 @@ def _save_tasks(file_path: Path, tasks: list) -> None:
 
 
 def _iter_all_tasks():
-    """Yield (task, is_group) for every task stored on disk."""
-    for file_path in USERS_DIR.glob("user_*.json"):
-        for task in _load_tasks(file_path):
-            yield task, False
-    for file_path in GROUPS_DIR.glob("group_*.json"):
-        for task in _load_tasks(file_path):
-            yield task, True
+    """Yield every task stored on disk."""
+    for file_path in USERS_DIR.glob("*.json"):
+        yield from _load_tasks(file_path)
 
 
 def _cancel_timer(task_id: str) -> None:
@@ -129,26 +128,21 @@ async def index():
 
 @app.route("/api/tasks", methods=["GET"])
 async def list_tasks():
-    user_tasks = []
-    group_tasks = []
-    for task, is_group in _iter_all_tasks():
-        item = {
-            "task_id": task.get("id"),
-            "type": "group" if is_group else "user",
-            "target_id": task.get("target_id"),
-            "umo": task.get("umo", ""),
-            "content": task.get("content", ""),
-            "time": task.get("time", ""),
-            "completed": bool(task.get("completed", False)),
-            "creator": task.get("creator", ""),
-        }
-        if is_group:
-            group_tasks.append(item)
-        else:
-            user_tasks.append(item)
-    user_tasks.sort(key=lambda x: x["time"])
-    group_tasks.sort(key=lambda x: x["time"])
-    return jsonify({"user_tasks": user_tasks, "group_tasks": group_tasks})
+    tasks = []
+    for task in _iter_all_tasks():
+        tasks.append(
+            {
+                "task_id": task.get("id"),
+                "sender_id": task.get("sender_id", ""),
+                "umo": task.get("umo", ""),
+                "content": task.get("content", ""),
+                "time": task.get("time", ""),
+                "completed": bool(task.get("completed", False)),
+                "creator": task.get("creator", ""),
+            }
+        )
+    tasks.sort(key=lambda x: x["time"])
+    return jsonify({"tasks": tasks})
 
 
 @app.route("/api/tasks", methods=["POST"])
@@ -163,34 +157,15 @@ async def create_task():
         ), 503
 
     data = await request.get_json() or {}
-    task_type = (data.get("type") or "").strip()
-    target_id = (data.get("target_id") or "").strip()
+    sender_id = (data.get("sender_id") or "").strip()
     umo = (data.get("umo") or "").strip()
     content = (data.get("content") or "").strip()
     task_time = (data.get("time") or "").strip()
 
-    if task_type not in ("user", "group"):
-        return jsonify({"success": False, "message": "type 必须为 user 或 group"})
-    if not target_id or not content or not task_time:
+    if not sender_id or not content or not task_time:
         return jsonify(
-            {"success": False, "message": "target_id、content、time 不能为空"}
+            {"success": False, "message": "sender_id、content、time 不能为空"}
         )
-
-    is_group = task_type == "group"
-    if is_group:
-        if not umo:
-            return jsonify(
-                {"success": False, "message": "群组任务必须填写完整 session_id (umo)"}
-            )
-        if ":" not in umo:
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "群组任务的 session_id 需包含平台前缀（如 aiocqhttp:GroupMessage:...）",
-                }
-            )
-    else:
-        umo = umo or target_id
 
     # Normalize datetime-local input (e.g. 2024-01-01T15:00) to ISO with seconds.
     if "T" in task_time and task_time.count(":") == 1:
@@ -204,12 +179,11 @@ async def create_task():
 
     try:
         task_id = await tm.create_task(
-            target_id=target_id,
-            is_group=is_group,
+            sender_id=sender_id,
             content=content,
             task_time=task_time,
             creator="webui",
-            umo=umo,
+            umo=umo or sender_id,
         )
     except Exception as e:
         logger.error(f"WebUI 创建任务失败: {e}")
@@ -224,9 +198,9 @@ async def create_task():
 
 @app.route("/api/tasks/<task_id>", methods=["DELETE"])
 async def delete_task(task_id):
-    for task, is_group in _iter_all_tasks():
+    for task in _iter_all_tasks():
         if task.get("id") == task_id:
-            file_path = _task_file(is_group, task.get("target_id", ""))
+            file_path = _task_file(task.get("sender_id", ""))
             tasks = _load_tasks(file_path)
             tasks = [t for t in tasks if t.get("id") != task_id]
             _save_tasks(file_path, tasks)
