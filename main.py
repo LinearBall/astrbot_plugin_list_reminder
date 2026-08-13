@@ -12,11 +12,9 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_plugin_data_path,  # 新版插件目录
-)
 
 from . import webui
+from .config import GROUPS_DIR, USERS_DIR
 
 
 def _run_webui_worker(config, task_manager):
@@ -24,19 +22,7 @@ def _run_webui_worker(config, task_manager):
     webui.run_server(config, task_manager)
 
 
-# 配置
-PLUGIN_DIR = Path(__file__).parent.absolute()
-PLUGIN_NAME = "list_reminder"
-PLUGIN_DATA_ROOT = (Path(get_astrbot_plugin_data_path()) / PLUGIN_NAME).resolve()
-USERS_DIR = PLUGIN_DATA_ROOT / "users"
-GROUPS_DIR = PLUGIN_DATA_ROOT / "groups"
-
-# 确保目录存在
-USERS_DIR.mkdir(parents=True, exist_ok=True)
-GROUPS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-@register("list_reminder", "LinearBall", "智能列表式任务管理插件", "1.0.0")
+@register("list_reminder", "LinearBall", "智能列表式任务管理插件", "1.1.1")
 class ListReminderPlugin(Star):
     """智能任务管理插件 - 支持用户和群组任务"""
 
