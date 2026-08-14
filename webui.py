@@ -3,18 +3,11 @@ import json
 import secrets
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 
 import hypercorn.asyncio
 from hypercorn.config import Config
-from quart import (
-    Quart,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
+from quart import Quart, jsonify, redirect, render_template, request, session, url_for
 
 from astrbot.api import logger
 
@@ -24,13 +17,13 @@ app = Quart(__name__)
 
 # Runtime state, configured in start_server()
 SERVER_LOGIN_KEY = None
-_task_manager = None
+TASK_MANAGER = None
 
 
 def set_task_manager(task_manager):
     """Keep a reference to the plugin TaskManager (called from main.py)."""
-    global _task_manager
-    _task_manager = task_manager
+    global TASK_MANAGER
+    TASK_MANAGER = task_manager
 
 
 # --- Task file helpers (read/write per request, no caching) ---
@@ -68,7 +61,7 @@ def _iter_all_tasks():
 
 def _cancel_timer(task_id: str) -> None:
     """Cancel an active timer in the TaskManager if present."""
-    tm = _task_manager
+    tm = TASK_MANAGER
     if not tm:
         return
     timer = tm.active_timers.pop(task_id, None)
@@ -81,13 +74,26 @@ def _cancel_timer(task_id: str) -> None:
 PUBLIC_ENDPOINTS = {"health_check", "login", "static"}
 
 
+class FastAPIResponse(dict):
+    def __init__(self, code: int, **kwargs):
+        super().__init__(code=code)
+        self.code = code
+        self.payload = kwargs
+
+    def to_dict(self):
+        return {"code": self.code, "payload": self.payload}
+
+
 @app.before_request
-async def require_login():
+async def check_if_logged_in():
     if session.get("authenticated"):
-        return None
-    if request.path.startswith("/api/"):
-        return jsonify({"success": False, "message": "未登录"}), 401
-    if request.endpoint not in PUBLIC_ENDPOINTS:
+        # return jsonify({"code": 200, "payload": {"message": "已登录"}})
+        return jsonify(FastAPIResponse(200, message="已登录"))
+    elif request.path.startswith("/api/"):
+        # return jsonify({"code": 401, "payload": {"message": "未登录"}})
+        return jsonify(FastAPIResponse(401, message="未登录"))
+    # elif request.endpoint not in PUBLIC_ENDPOINTS:
+    else:
         return redirect(url_for("login"))
 
 
@@ -96,7 +102,7 @@ async def require_login():
 
 @app.route("/health")
 async def health_check():
-    return jsonify({"status": "running"})
+    return jsonify(FastAPIResponse(200, status="running"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -106,10 +112,11 @@ async def login():
     error = None
     if request.method == "POST":
         form = await request.form
+        input_key = form.get("key")
         if form.get("key") == SERVER_LOGIN_KEY:
             session["authenticated"] = True
             return redirect(url_for("index"))
-        error = "密钥错误，请重试。"
+        error = "{} != {} 密钥错误，请重试。".format(input_key, SERVER_LOGIN_KEY)
     return await render_template("login.html", error=error)
 
 
@@ -153,14 +160,17 @@ async def list_tasks():
 
 @app.route("/api/tasks", methods=["POST"])
 async def create_task():
-    tm = _task_manager
+    tm = TASK_MANAGER
     if tm is None:
-        return jsonify(
-            {
-                "success": False,
-                "message": "TaskManager 不可用，无法创建会执行的提醒任务",
-            }
-        ), 503
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "TaskManager 不可用，无法创建会执行的提醒任务",
+                }
+            ),
+            503,
+        )
 
     data = await request.get_json() or {}
     task_type = (data.get("type") or "").strip()
@@ -238,19 +248,15 @@ async def delete_task(task_id):
 # --- Server lifecycle ---
 
 
-def run_server(config, task_manager=None):
-    asyncio.run(start_server(config, task_manager))
-
-
 async def start_server(config=None, task_manager=None):
-    global SERVER_LOGIN_KEY, _task_manager
+    global SERVER_LOGIN_KEY, TASK_MANAGER
     config = config or {}
     port = config.get("webui_port", 5001)
     SERVER_LOGIN_KEY = config.get("server_key") or secrets.token_urlsafe(16)
     if not config.get("server_key"):
         logger.info(f"自动生成的WebUI登录密钥: {SERVER_LOGIN_KEY}")
     if task_manager is not None:
-        _task_manager = task_manager
+        TASK_MANAGER = task_manager
     app.secret_key = secrets.token_urlsafe(32)
 
     hypercorn_config = Config()
