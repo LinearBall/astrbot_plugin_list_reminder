@@ -88,13 +88,13 @@ class FastAPIResponse(dict):
 async def check_if_logged_in():
     if session.get("authenticated"):
         # return jsonify({"code": 200, "payload": {"message": "已登录"}})
-        return jsonify(FastAPIResponse(200, message="已登录"))
+        return None
     elif request.path.startswith("/api/"):
         # return jsonify({"code": 401, "payload": {"message": "未登录"}})
         return jsonify(FastAPIResponse(401, message="未登录"))
-    # elif request.endpoint not in PUBLIC_ENDPOINTS:
-    else:
+    elif request.endpoint not in PUBLIC_ENDPOINTS:
         return redirect(url_for("login"))
+    return None
 
 
 # --- Routes ---
