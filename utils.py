@@ -1,4 +1,4 @@
-"""工具函数模块"""
+# 工具函数模块
 
 import json
 from pathlib import Path
@@ -6,12 +6,12 @@ from typing import Any
 
 
 def ensure_dir(path: Path) -> None:
-    """确保目录存在"""
+    # 确保目录存在，不存在则创建
     path.mkdir(parents=True, exist_ok=True)
 
 
 def save_json(data: Any, file_path: Path) -> bool:
-    """保存 JSON 数据到文件"""
+    # 将 JSON 数据保存到文件，成功返回 True
     try:
         ensure_dir(file_path.parent)
         with open(file_path, "w", encoding="utf-8") as f:
@@ -23,7 +23,7 @@ def save_json(data: Any, file_path: Path) -> bool:
 
 
 def load_json(file_path: Path) -> Any | None:
-    """从文件加载 JSON 数据"""
+    # 从文件加载 JSON 数据，文件不存在或加载失败返回 None
     if not file_path.exists():
         return None
 
@@ -36,7 +36,7 @@ def load_json(file_path: Path) -> Any | None:
 
 
 def get_task_stats(tasks: list[dict[str, Any]]) -> dict[str, int]:
-    """获取任务统计信息"""
+    # 统计任务列表的各项数量（总数、待完成、已完成、各优先级数量）
     stats = {
         "total": len(tasks),
         "pending": 0,

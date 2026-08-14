@@ -11,30 +11,67 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
 .header h1 { font-size: 18px; }
 .header button { padding: 6px 14px; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; cursor: pointer; font-size: 13px; }
 .header button:hover { background: rgba(255,255,255,0.35); }
-.container { max-width: 960px; margin: 16px auto; padding: 0 16px; }
+.container { max-width: 1080px; margin: 16px auto; padding: 0 16px; }
 .card { background: #fff; border-radius: 6px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
-.card h2 { font-size: 16px; margin-bottom: 12px; border-bottom: 2px solid #1677ff; padding-bottom: 6px; }
-.form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.form-row label { min-width: 80px; line-height: 32px; font-size: 13px; color: #555; }
-.form-row input, .form-row textarea { flex: 1; min-width: 150px; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
+.card h2 { font-size: 16px; margin-bottom: 12px; border-bottom: 2px solid #1677ff; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+.card h2 .actions { font-size: 12px; font-weight: normal; }
+.form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+.form-row label { min-width: 90px; line-height: 32px; font-size: 13px; color: #555; }
+.form-row .required::after { content: " *"; color: #ff4d4f; }
+.form-row input, .form-row textarea, .form-row select { flex: 1; min-width: 150px; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
 .form-row textarea { min-height: 56px; resize: vertical; }
-.form-row button { padding: 7px 20px; background: #1677ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
-.form-row button:hover { background: #4096ff; }
+.btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #1677ff; color: #fff; }
+.btn-primary:hover { background: #4096ff; }
+.btn-danger { background: #ff4d4f; color: #fff; }
+.btn-danger:hover { background: #ff7875; }
+.btn-ghost { background: #f5f5f5; color: #333; border: 1px solid #d9d9d9; }
+.btn-ghost:hover { background: #e6f4ff; }
+.btn-small { padding: 3px 10px; font-size: 12px; }
 .msg { padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 13px; display: none; }
 .msg.success { background: #f6ffed; border: 1px solid #b7eb8f; color: #389e0d; }
 .msg.error { background: #fff2f0; border: 1px solid #ffccc7; color: #cf1322; }
-.task-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.task-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; gap: 10px; }
 .task-item:last-child { border-bottom: none; }
 .task-item.completed { opacity: 0.55; }
 .task-item.completed .task-content { text-decoration: line-through; }
+.task-item.hidden-by-tag { display: none; }
+.task-check { padding-top: 4px; }
 .task-info { flex: 1; }
 .task-content { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 .task-meta { color: #888; font-size: 12px; line-height: 1.6; }
 .task-meta span { margin-right: 12px; }
-.task-actions button { padding: 4px 10px; background: #ff4d4f; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; }
-.task-actions button:hover { background: #ff7875; }
+.task-tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.task-actions { display: flex; flex-direction: column; gap: 4px; }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; background: #e6f4ff; color: #1677ff; border: 1px solid #91caff; font-size: 12px; cursor: pointer; user-select: none; }
+.tag-chip.filter-include { background: #1677ff; color: #fff; border-color: #1677ff; }
+.tag-chip.filter-exclude { background: #ff4d4f; color: #fff; border-color: #ff4d4f; text-decoration: line-through; }
+.tag-chip.user { background: #f6ffed; border-color: #b7eb8f; color: #389e0d; }
+.tag-chip.user.filter-include { background: #389e0d; color: #fff; }
+.tag-chip .rm { color: inherit; opacity: 0.7; margin-left: 2px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.filter-summary { font-size: 12px; color: #666; margin-bottom: 8px; }
+.filter-summary strong { color: #1677ff; }
 .empty { text-align: center; color: #999; padding: 20px; font-size: 13px; }
 .hint { color: #999; font-size: 12px; }
+.tab-bar { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid #e5e5e5; }
+.tab-bar .tab { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #555; border-bottom: 2px solid transparent; }
+.tab-bar .tab.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: 500; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.user-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.user-row:last-child { border-bottom: none; }
+.user-info { flex: 1; }
+.user-info .sid { font-weight: 500; word-break: break-all; }
+.user-info .umo { color: #888; font-size: 12px; margin-top: 2px; word-break: break-all; }
+.tag-input-inline { border: 1px dashed #d9d9d9; padding: 3px 6px; border-radius: 4px; font-size: 12px; min-width: 100px; }
+.admin-only { display: none; }
+body.is-admin .admin-only { display: initial; }
+button.admin-only { display: none; }
+body.is-admin button.admin-only { display: inline-block; }
+div.admin-only { display: none; }
+body.is-admin div.admin-only { display: block; }
+.user-self-note { font-size: 12px; color: #1677ff; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -46,36 +83,118 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
 </div>
 <div class="container">
 <div id="msg" class="msg"></div>
+
 <div class="card">
+<div class="tab-bar">
+<div class="tab active" data-tab="tasks">任务</div>
+<div class="tab admin-only" data-tab="tags">标签</div>
+<div class="tab admin-only" data-tab="users">用户</div>
+</div>
+
+<!-- ===== Tab: Tasks ===== -->
+<div class="tab-panel active" data-panel="tasks">
 <h2>创建任务</h2>
 <div class="form-row">
-<label>sender_id</label>
+<label class="required">sender_id</label>
 <input id="sender_id" placeholder="发送者 ID（任务归属）">
-<label>umo</label>
-<input id="umo" placeholder="session_id（用于发送提醒，可选）">
 </div>
 <div class="form-row">
-<label>提醒时间</label>
+<label class="required">umo</label>
+<input id="umo" placeholder="用于发送提醒的 unified_msg_origin，必填">
+</div>
+<div class="form-row">
+<label class="required">提醒时间</label>
 <input id="task_time" type="datetime-local">
 </div>
 <div class="form-row">
-<label>内容</label>
+<label class="required">内容</label>
 <textarea id="task_content" placeholder="提醒内容"></textarea>
 </div>
 <div class="form-row">
-<span class="hint">umo 留空则使用 sender_id 作为发送目标。</span>
+<label>标签</label>
+<input id="task_tag_input" placeholder="回车或逗号添加，例如：节日, 工作">
+</div>
+<div class="form-row" style="margin-left:100px">
+<div id="task_tag_preview" class="chip-row"></div>
 </div>
 <div class="form-row">
-<button type="button" id="create_btn">创建任务</button>
+<button type="button" id="create_btn" class="btn btn-primary">创建任务</button>
+<span class="hint">umo 用于确定发送目标（例如 lark-Xxx:FriendMessage:xxx），必须填写才能正确投递。</span>
 </div>
+
+<h2 style="margin-top:24px">
+所有任务
+<span class="actions">
+<button type="button" id="refresh_btn" class="btn btn-ghost btn-small">刷新</button>
+<button type="button" id="bulk_del_btn" class="btn btn-danger btn-small admin-only">删除选中</button>
+</span>
+</h2>
+<div class="form-row" style="margin-bottom:8px">
+<input id="search_input" placeholder="搜索任务内容 / ID，回车提交">
+<button type="button" id="search_btn" class="btn btn-ghost btn-small">搜索</button>
+<button type="button" id="search_clear_btn" class="btn btn-ghost btn-small">清除</button>
 </div>
-<div class="card">
-<h2>所有任务</h2>
+<div class="filter-summary" id="filter_summary"></div>
+<div class="chip-row" id="task_tag_filter"></div>
 <div id="task_list"><div class="empty">加载中...</div></div>
 </div>
+
+<!-- ===== Tab: Tags ===== -->
+<div class="tab-panel" data-panel="tags">
+<h2>任务标签
+<span class="actions"><span class="hint">点击标签查看/批量删除该标签下的任务</span></span>
+</h2>
+<div class="chip-row" id="task_tag_catalogue"><div class="empty">加载中...</div></div>
+
+<h2 style="margin-top:20px">用户标签
+<span class="actions"><span class="hint">点击标签查看拥有该标签的用户</span></span>
+</h2>
+<div class="chip-row" id="user_tag_catalogue"><div class="empty">加载中...</div></div>
 </div>
-<script>
+
+<!-- ===== Tab: Users ===== -->
+<div class="tab-panel" data-panel="users">
+<h2>新增/更新用户
+<span class="actions"><span class="hint">首次交互的用户会自动登记，也可以在这里手动编辑</span></span>
+</h2>
+<div class="form-row">
+<label class="required">sender_id</label>
+<input id="new_user_sender" placeholder="用户 sender_id">
+</div>
+<div class="form-row">
+<label>umo</label>
+<input id="new_user_umo" placeholder="unified_msg_origin（用于任务广播时投递提醒）">
+</div>
+<div class="form-row">
+<label>标签</label>
+<input id="new_user_tags" placeholder="用逗号分隔，例如：二处, VIP">
+</div>
+<div class="form-row">
+<button type="button" id="save_user_btn" class="btn btn-primary">保存</button>
+</div>
+
+<h2 style="margin-top:20px">用户列表</h2>
+<div id="user_list"><div class="empty">加载中...</div></div>
+</div>
+
+</div>
+</div><script>
 const msgEl = document.getElementById("msg");
+
+// ---------- Global state ----------
+const state = {
+  me: { sender_id: '', is_admin: false },
+  tasks: [],
+  tagIndex: { task_tags: [], user_tags: [], users: [] },
+  users: [],
+  // Task tag filter: {include: Set<string>, exclude: Set<string>} (case-folded).
+  filter: { include: new Set(), exclude: new Set() },
+  searchQuery: '',
+  // Draft tags in the create-task form.
+  draftTaskTags: [],
+  // Which task_ids are currently checked (for bulk delete).
+  selectedIds: new Set(),
+};
 
 function showMsg(text, type) {
   msgEl.textContent = text;
@@ -86,59 +205,243 @@ function showMsg(text, type) {
 
 function esc(s) {
   const d = document.createElement("div");
-  d.textContent = s;
+  d.textContent = s == null ? "" : String(s);
   return d.innerHTML;
 }
 
+function fold(s) { return String(s || "").toLowerCase(); }
+
+function parseTagInput(raw) {
+  if (!raw) return [];
+  return raw
+    .replace(/[，、;]/g, ",")
+    .split(",")
+    .map(function (s) { return s.trim(); })
+    .filter(function (s) { return s.length > 0; });
+}
+
+function mergeTags(existing, incoming) {
+  const seen = new Set(existing.map(fold));
+  const out = existing.slice();
+  for (const t of incoming) {
+    if (!seen.has(fold(t))) { seen.add(fold(t)); out.push(t); }
+  }
+  return out;
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll(".tab-bar .tab").forEach(function (el) {
+  el.addEventListener("click", function () {
+    document.querySelectorAll(".tab-bar .tab").forEach(function (t) { t.classList.remove("active"); });
+    document.querySelectorAll(".tab-panel").forEach(function (t) { t.classList.remove("active"); });
+    el.classList.add("active");
+    const name = el.dataset.tab;
+    document.querySelector('.tab-panel[data-panel="' + name + '"]').classList.add("active");
+    if (name === "tags" || name === "users") { loadTags(); }
+    if (name === "users") { loadUsers(); }
+  });
+});
+
+// ---------- Tag filter helpers ----------
+function summarizeFilter() {
+  const el = document.getElementById("filter_summary");
+  const inc = Array.from(state.filter.include);
+  const exc = Array.from(state.filter.exclude);
+  if (!inc.length && !exc.length) {
+    el.innerHTML = "共 <strong>" + state.tasks.length + "</strong> 个任务。点击标签可筛选或隐藏。";
+    return;
+  }
+  let s = "";
+  if (inc.length) s += "仅显示带 <strong>" + inc.map(esc).join(" / ") + "</strong> 的任务；";
+  if (exc.length) s += "隐藏带 <strong>" + exc.map(esc).join(" / ") + "</strong> 的任务；";
+  s += " <a href='#' id='clear_filter'>清除筛选</a>";
+  el.innerHTML = s;
+  const clr = document.getElementById("clear_filter");
+  if (clr) clr.addEventListener("click", function (e) {
+    e.preventDefault();
+    state.filter.include.clear();
+    state.filter.exclude.clear();
+    renderTasks();
+  });
+}
+
+function toggleFilter(tag) {
+  const key = fold(tag);
+  if (state.filter.include.has(key)) {
+    state.filter.include.delete(key);
+    state.filter.exclude.add(key);
+  } else if (state.filter.exclude.has(key)) {
+    state.filter.exclude.delete(key);
+  } else {
+    state.filter.include.add(key);
+  }
+  renderTasks();
+}
+
+function matchesFilter(task) {
+  const tags = (task.tags || []).map(fold);
+  for (const inc of state.filter.include) {
+    if (!tags.includes(inc)) return false;
+  }
+  for (const exc of state.filter.exclude) {
+    if (tags.includes(exc)) return false;
+  }
+  return true;
+}
+
+// ---------- Tasks ----------
 async function loadTasks() {
   try {
     const r = await fetch("/api/tasks");
     if (r.status === 401) { window.location.href = "/login"; return; }
     const d = await r.json();
-    renderList(d.tasks || []);
+    state.tasks = d.tasks || [];
+    // Drop selections that no longer exist.
+    const alive = new Set(state.tasks.map(function (t) { return t.task_id; }));
+    for (const id of Array.from(state.selectedIds)) {
+      if (!alive.has(id)) state.selectedIds.delete(id);
+    }
+    renderTasks();
   } catch (e) {
     showMsg("加载失败: " + e.message, "error");
   }
 }
 
-function renderList(tasks) {
+function renderTasks() {
+  summarizeFilter();
+  renderTaskFilterChips();
   const el = document.getElementById("task_list");
-  if (!tasks.length) { el.innerHTML = `<div class="empty">暂无任务</div>`; return; }
+  const visible = state.tasks.filter(matchesFilter);
+  if (!visible.length) {
+    el.innerHTML = '<div class="empty">' + (state.tasks.length ? "当前筛选下没有任务" : "暂无任务") + "</div>";
+    return;
+  }
   let h = "";
-  for (const t of tasks) {
+  for (const t of visible) {
     const cls = t.completed ? " completed" : "";
-    h += `<div class="task-item${cls}">`;
-    h += `<div class="task-info">`;
-    h += `<div class="task-content">${esc(t.content)}</div>`;
-    h += `<div class="task-meta">`;
-    h += `<span>ID: ${esc(t.task_id || "")}</span>`;
-    h += `<span>sender: ${esc(t.sender_id || "")}</span>`;
-    if (t.umo) h += `<span>umo: ${esc(t.umo)}</span>`;
-    h += `<span>时间: ${esc(t.time)}</span>`;
-    h += `<span>${t.completed ? "已完成" : "待提醒"}</span>`;
-    if (t.creator) h += `<span>创建者: ${esc(t.creator)}</span>`;
-    h += `</div></div>`;
-    h += `<div class="task-actions"><button data-task-id="${esc(t.task_id)}">删除</button></div>`;
-    h += `</div>`;
+    const checked = state.selectedIds.has(t.task_id) ? "checked" : "";
+    h += '<div class="task-item' + cls + '">';
+    h += '<div class="task-check"><input type="checkbox" class="task-select" data-id="' + esc(t.task_id) + '" ' + checked + '></div>';
+    h += '<div class="task-info">';
+    h += '<div class="task-content">' + esc(t.content) + "</div>";
+    h += '<div class="task-meta">';
+    h += "<span>时间: " + esc(t.time) + "</span>";
+    h += "<span>" + (t.completed ? "已完成" : "待提醒") + "</span>";
+    h += "<span>sender: " + esc(t.sender_id) + "</span>";
+    if (t.umo) h += "<span>umo: " + esc(t.umo) + "</span>";
+    if (t.creator) h += "<span>创建者: " + esc(t.creator) + "</span>";
+    h += "<span>ID: " + esc(t.task_id) + "</span>";
+    h += "</div>";
+    h += '<div class="task-tags">';
+    for (const tag of (t.tags || [])) {
+      h += '<span class="tag-chip" data-tag="' + esc(tag) + '" title="点击筛选">' + esc(tag) + "</span>";
+    }
+    h += '<input type="text" class="tag-input-inline" data-task-id="' + esc(t.task_id) + '" placeholder="+ 添加/回车提交">';
+    h += "</div>";
+    h += "</div>";
+    h += '<div class="task-actions">';
+    h += '<button class="btn btn-danger btn-small" data-del-id="' + esc(t.task_id) + '">删除</button>';
+    h += "</div>";
+    h += "</div>";
   }
   el.innerHTML = h;
 }
+
+function renderTaskFilterChips() {
+  // Gather all tags used by current tasks so users can toggle them.
+  const el = document.getElementById("task_tag_filter");
+  const map = new Map();
+  for (const t of state.tasks) {
+    for (const tag of (t.tags || [])) {
+      const k = fold(tag);
+      if (!map.has(k)) map.set(k, { tag: tag, count: 1 });
+      else map.get(k).count += 1;
+    }
+  }
+  if (!map.size) { el.innerHTML = ""; return; }
+  const entries = Array.from(map.values()).sort(function (a, b) { return b.count - a.count; });
+  let h = "";
+  for (const it of entries) {
+    const k = fold(it.tag);
+    let cls = "tag-chip";
+    if (state.filter.include.has(k)) cls += " filter-include";
+    else if (state.filter.exclude.has(k)) cls += " filter-exclude";
+    h += '<span class="' + cls + '" data-filter="' + esc(it.tag) + '">' + esc(it.tag) + " (" + it.count + ")</span>";
+  }
+  el.innerHTML = h;
+}
+// ---------- Draft tags for create-task ----------
+function renderDraftTags() {
+  const el = document.getElementById("task_tag_preview");
+  if (!state.draftTaskTags.length) { el.innerHTML = ""; return; }
+  el.innerHTML = state.draftTaskTags
+    .map(function (t) { return '<span class="tag-chip" data-draft="' + esc(t) + '">' + esc(t) + '<span class="rm">×</span></span>'; })
+    .join("");
+}
+
+document.getElementById("task_tag_input").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" || e.key === ",") {
+    e.preventDefault();
+    const parts = parseTagInput(this.value);
+    if (parts.length) {
+      state.draftTaskTags = mergeTags(state.draftTaskTags, parts);
+      this.value = "";
+      renderDraftTags();
+    }
+  }
+});
+document.getElementById("task_tag_input").addEventListener("blur", function () {
+  const parts = parseTagInput(this.value);
+  if (parts.length) {
+    state.draftTaskTags = mergeTags(state.draftTaskTags, parts);
+    this.value = "";
+    renderDraftTags();
+  }
+});
+document.getElementById("task_tag_preview").addEventListener("click", function (e) {
+  const chip = e.target.closest("[data-draft]");
+  if (!chip) return;
+  const key = fold(chip.dataset.draft);
+  state.draftTaskTags = state.draftTaskTags.filter(function (t) { return fold(t) !== key; });
+  renderDraftTags();
+});
 
 async function createTask() {
   const sender_id = document.getElementById("sender_id").value.trim();
   const umo = document.getElementById("umo").value.trim();
   const time = document.getElementById("task_time").value;
   const content = document.getElementById("task_content").value.trim();
-  if (!sender_id || !content || !time) { showMsg("请填写 sender_id、内容和时间", "error"); return; }
+  // Fold any leftover text in the tag input.
+  const leftover = parseTagInput(document.getElementById("task_tag_input").value);
+  if (leftover.length) {
+    state.draftTaskTags = mergeTags(state.draftTaskTags, leftover);
+    document.getElementById("task_tag_input").value = "";
+    renderDraftTags();
+  }
+  if (!sender_id) { showMsg("请填写 sender_id", "error"); return; }
+  if (!umo) { showMsg("请填写 umo（发送目标），这是必填项", "error"); return; }
+  if (!content) { showMsg("请填写任务内容", "error"); return; }
+  if (!time) { showMsg("请填写提醒时间", "error"); return; }
+
   try {
     const r = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sender_id: sender_id, umo: umo, time: time, content: content })
+      body: JSON.stringify({
+        sender_id: sender_id, umo: umo, time: time, content: content,
+        tags: state.draftTaskTags,
+      })
     });
     const d = await r.json();
-    if (d.success) { showMsg(d.message, "success"); loadTasks(); }
-    else { showMsg(d.message, "error"); }
+    if (d.success) {
+      showMsg(d.message, "success");
+      state.draftTaskTags = [];
+      renderDraftTags();
+      document.getElementById("task_content").value = "";
+      loadTasks();
+    } else {
+      showMsg(d.message, "error");
+    }
   } catch (e) { showMsg("创建失败: " + e.message, "error"); }
 }
 
@@ -152,14 +455,308 @@ async function deleteTask(id) {
   } catch (e) { showMsg("删除失败: " + e.message, "error"); }
 }
 
-document.addEventListener("click", function (e) {
-  const el = e.target.closest ? e.target : e.target.parentElement;
-  const b = el && el.closest("button[data-task-id]");
-  if (b) { deleteTask(b.dataset.taskId); }
+async function updateTaskTags(taskId, tagsList) {
+  try {
+    const r = await fetch("/api/tasks/" + encodeURIComponent(taskId) + "/tags", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: tagsList }),
+    });
+    const d = await r.json();
+    if (d.success) { showMsg("标签已更新", "success"); loadTasks(); }
+    else { showMsg(d.message || "更新失败", "error"); }
+  } catch (e) { showMsg("更新失败: " + e.message, "error"); }
+}
+
+async function bulkDelete(opts) {
+  const payload = {};
+  if (opts && opts.ids && opts.ids.length) payload.task_ids = opts.ids;
+  if (opts && opts.tags && opts.tags.length) payload.tags = opts.tags;
+  if (!payload.task_ids && !payload.tags) {
+    showMsg("请先选中任务或指定标签", "error");
+    return;
+  }
+  const desc = payload.tags ? ("带标签「" + payload.tags.join("、") + "」的所有任务") : (payload.task_ids.length + " 个任务");
+  if (!confirm("确认删除 " + desc + " ？此操作不可撤销。")) return;
+  try {
+    const r = await fetch("/api/tasks/bulk_delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.success) {
+      showMsg(d.message, "success");
+      state.selectedIds.clear();
+      loadTasks();
+      loadTags();
+    } else {
+      showMsg(d.message || "批量删除失败", "error");
+    }
+  } catch (e) { showMsg("删除失败: " + e.message, "error"); }
+}
+
+// Task list interactions.
+document.getElementById("task_list").addEventListener("click", function (e) {
+  const del = e.target.closest("[data-del-id]");
+  if (del) { deleteTask(del.dataset.delId); return; }
+  const chip = e.target.closest(".task-item .tag-chip[data-tag]");
+  if (chip) { toggleFilter(chip.dataset.tag); return; }
+});
+document.getElementById("task_list").addEventListener("change", function (e) {
+  const cb = e.target.closest(".task-select");
+  if (cb) {
+    if (cb.checked) state.selectedIds.add(cb.dataset.id);
+    else state.selectedIds.delete(cb.dataset.id);
+  }
+});
+document.getElementById("task_list").addEventListener("keydown", function (e) {
+  const inp = e.target.closest(".tag-input-inline");
+  if (!inp) return;
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const parts = parseTagInput(inp.value);
+  if (!parts.length) return;
+  const task = state.tasks.find(function (t) { return t.task_id === inp.dataset.taskId; });
+  if (!task) return;
+  const merged = mergeTags(task.tags || [], parts);
+  updateTaskTags(inp.dataset.taskId, merged);
+});
+
+document.getElementById("task_tag_filter").addEventListener("click", function (e) {
+  const chip = e.target.closest("[data-filter]");
+  if (chip) toggleFilter(chip.dataset.filter);
 });
 
 document.getElementById("create_btn").addEventListener("click", createTask);
-loadTasks();
+document.getElementById("refresh_btn").addEventListener("click", function () { loadTasks(); loadTags(); });
+document.getElementById("bulk_del_btn").addEventListener("click", function () {
+  bulkDelete({ ids: Array.from(state.selectedIds) });
+});
+// ---------- Tags panel ----------
+async function loadTags() {
+  try {
+    const r = await fetch("/api/tags");
+    if (r.status === 401) { window.location.href = "/login"; return; }
+    state.tagIndex = await r.json();
+    renderTagCatalogues();
+  } catch (e) { showMsg("标签加载失败: " + e.message, "error"); }
+}
+
+function renderTagCatalogues() {
+  const tt = document.getElementById("task_tag_catalogue");
+  if (!state.tagIndex.task_tags || !state.tagIndex.task_tags.length) {
+    tt.innerHTML = '<div class="empty">还没有任务标签</div>';
+  } else {
+    tt.innerHTML = state.tagIndex.task_tags.map(function (it) {
+      return '<span class="tag-chip" data-task-tag="' + esc(it.tag) + '">' + esc(it.tag) + " (" + it.count + ")" +
+        '<button class="btn btn-danger btn-small admin-only" data-tag-del="' + esc(it.tag) + '" style="margin-left:6px">删</button>' +
+        "</span>";
+    }).join("");
+  }
+
+  const ut = document.getElementById("user_tag_catalogue");
+  if (!state.tagIndex.user_tags || !state.tagIndex.user_tags.length) {
+    ut.innerHTML = '<div class="empty">还没有用户标签</div>';
+  } else {
+    ut.innerHTML = state.tagIndex.user_tags.map(function (it) {
+      return '<span class="tag-chip user" data-user-tag="' + esc(it.tag) + '">' + esc(it.tag) + " (" + it.count + ")</span>";
+    }).join("");
+  }
+}
+
+document.getElementById("task_tag_catalogue").addEventListener("click", function (e) {
+  const del = e.target.closest("[data-tag-del]");
+  if (del) {
+    e.stopPropagation();
+    bulkDelete({ tags: [del.dataset.tagDel] });
+    return;
+  }
+  const chip = e.target.closest("[data-task-tag]");
+  if (!chip) return;
+  // Switch to tasks tab and apply filter.
+  state.filter.include = new Set([fold(chip.dataset.taskTag)]);
+  state.filter.exclude = new Set();
+  document.querySelector('.tab-bar .tab[data-tab="tasks"]').click();
+  renderTasks();
+});
+
+document.getElementById("user_tag_catalogue").addEventListener("click", function (e) {
+  const chip = e.target.closest("[data-user-tag]");
+  if (!chip) return;
+  const tag = chip.dataset.userTag;
+  const users = (state.tagIndex.users || []).filter(function (u) {
+    return (u.tags || []).some(function (t) { return fold(t) === fold(tag); });
+  });
+  if (!users.length) { showMsg("没有拥有该标签的用户", "error"); return; }
+  showMsg("拥有「" + tag + "」标签的用户：" + users.map(function (u) { return u.sender_id; }).join("、"), "success");
+});
+
+// ---------- Users panel ----------
+async function loadUsers() {
+  try {
+    const r = await fetch("/api/users");
+    if (r.status === 401) { window.location.href = "/login"; return; }
+    const d = await r.json();
+    state.users = d.users || [];
+    renderUsers();
+  } catch (e) { showMsg("用户加载失败: " + e.message, "error"); }
+}
+
+function renderUsers() {
+  const el = document.getElementById("user_list");
+  if (!state.users.length) { el.innerHTML = '<div class="empty">还没有登记的用户</div>'; return; }
+  let h = "";
+  for (const u of state.users) {
+    h += '<div class="user-row">';
+    h += '<div class="user-info">';
+    h += '<div class="sid">' + esc(u.sender_id) + "</div>";
+    h += '<div class="umo">umo: ' + (u.umo ? esc(u.umo) : "<em>未记录</em>") + "</div>";
+    h += '<div class="task-tags" style="margin-top:6px">';
+    for (const tag of (u.tags || [])) {
+      h += '<span class="tag-chip user" data-user-remove="' + esc(u.sender_id) + '" data-tag="' + esc(tag) + '">' + esc(tag) + '<span class="rm">×</span></span>';
+    }
+    h += '<input type="text" class="tag-input-inline" data-user-add="' + esc(u.sender_id) + '" placeholder="+ 添加标签，回车确认">';
+    h += "</div>";
+    h += "</div>";
+    h += '<div class="task-actions">';
+    h += '<button class="btn btn-ghost btn-small" data-user-umo="' + esc(u.sender_id) + '">改 umo</button>';
+    h += '<button class="btn btn-danger btn-small" data-user-del="' + esc(u.sender_id) + '">删除</button>';
+    h += "</div>";
+    h += "</div>";
+  }
+  el.innerHTML = h;
+}
+
+async function saveUser(sender_id, patch) {
+  const body = Object.assign({ sender_id: sender_id }, patch);
+  const r = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!d.success) throw new Error(d.message || "保存失败");
+  return d.user;
+}
+
+document.getElementById("save_user_btn").addEventListener("click", async function () {
+  const sender_id = document.getElementById("new_user_sender").value.trim();
+  const umo = document.getElementById("new_user_umo").value.trim();
+  const tags = parseTagInput(document.getElementById("new_user_tags").value);
+  if (!sender_id) { showMsg("请填写 sender_id", "error"); return; }
+  try {
+    await saveUser(sender_id, { umo: umo, tags: tags });
+    showMsg("用户已保存", "success");
+    document.getElementById("new_user_sender").value = "";
+    document.getElementById("new_user_umo").value = "";
+    document.getElementById("new_user_tags").value = "";
+    loadUsers();
+    loadTags();
+  } catch (e) { showMsg(e.message, "error"); }
+});
+
+document.getElementById("user_list").addEventListener("click", async function (e) {
+  const del = e.target.closest("[data-user-del]");
+  if (del) {
+    if (!confirm("删除用户 " + del.dataset.userDel + " ？")) return;
+    const r = await fetch("/api/users/" + encodeURIComponent(del.dataset.userDel), { method: "DELETE" });
+    const d = await r.json();
+    if (d.success) { showMsg(d.message, "success"); loadUsers(); loadTags(); }
+    else { showMsg(d.message, "error"); }
+    return;
+  }
+  const rmTag = e.target.closest("[data-user-remove]");
+  if (rmTag) {
+    const sid = rmTag.dataset.userRemove;
+    const tag = rmTag.dataset.tag;
+    const user = state.users.find(function (u) { return u.sender_id === sid; });
+    if (!user) return;
+    const remaining = (user.tags || []).filter(function (t) { return fold(t) !== fold(tag); });
+    try {
+      await saveUser(sid, { tags: remaining });
+      showMsg("标签已移除", "success");
+      loadUsers();
+      loadTags();
+    } catch (err) { showMsg(err.message, "error"); }
+    return;
+  }
+  const editUmo = e.target.closest("[data-user-umo]");
+  if (editUmo) {
+    const sid = editUmo.dataset.userUmo;
+    const user = state.users.find(function (u) { return u.sender_id === sid; });
+    const cur = user ? user.umo : "";
+    const next = prompt("请输入新的 umo（unified_msg_origin）", cur || "");
+    if (next === null) return;
+    try {
+      await saveUser(sid, { umo: next.trim() });
+      showMsg("umo 已更新", "success");
+      loadUsers();
+    } catch (err) { showMsg(err.message, "error"); }
+  }
+});
+
+document.getElementById("user_list").addEventListener("keydown", async function (e) {
+  const inp = e.target.closest("[data-user-add]");
+  if (!inp || e.key !== "Enter") return;
+  e.preventDefault();
+  const parts = parseTagInput(inp.value);
+  if (!parts.length) return;
+  const sid = inp.dataset.userAdd;
+  const user = state.users.find(function (u) { return u.sender_id === sid; });
+  if (!user) return;
+  const merged = mergeTags(user.tags || [], parts);
+  try {
+    await saveUser(sid, { tags: merged });
+    showMsg("标签已添加", "success");
+    loadUsers();
+    loadTags();
+  } catch (err) { showMsg(err.message, "error"); }
+});
+
+// ---------- Identity / role ----------
+async function loadMe() {
+  try {
+    const r = await fetch('/api/me');
+    if (r.status === 401) { window.location.href = '/login'; return; }
+    const d = await r.json();
+    if (d.success) {
+      state.me = { sender_id: d.sender_id, is_admin: d.is_admin };
+      if (d.is_admin) document.body.classList.add('is-admin');
+      // For non-admin, pre-fill and hide sender_id/umo in create form.
+      if (!d.is_admin) {
+        const s = document.getElementById('sender_id');
+        const u = document.getElementById('umo');
+        s.value = d.sender_id;
+        s.readOnly = true;
+        s.style.opacity = '0.6';
+        // Hide umo row visually if we have a stored umo.
+        u.closest('.form-row').style.display = 'none';
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function searchTasks() {
+  state.searchQuery = document.getElementById('search_input').value.trim();
+  loadTasks();
+}
+
+document.getElementById('search_btn').addEventListener('click', searchTasks);
+document.getElementById('search_clear_btn').addEventListener('click', function () {
+  document.getElementById('search_input').value = '';
+  state.searchQuery = '';
+  loadTasks();
+});
+document.getElementById('search_input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') searchTasks();
+});
+
+// ---------- Boot ----------
+loadMe().then(function () {
+  loadTasks();
+  loadTags();
+});
 </script>
 </body>
 </html>
