@@ -67,10 +67,11 @@ class ListReminderPlugin(Star):
     async def list_tasks(self, event: AstrMessageEvent):
         """列出任务"""
         user_id = event.unified_msg_origin
+        group_id = event.get_group_id()
         tasks = await self.task_manager.get_tasks(user_id)
 
         if not tasks:
-            yield event.plain_result("📝 您当前没有待办任务")
+            yield event.plain_result(group_id + "📝 您当前没有待办任务")
             return
 
         msg = "📝 您的任务列表：\n"
@@ -78,7 +79,7 @@ class ListReminderPlugin(Star):
             status = "✅" if task.get("completed") else "⏰"
             msg += f"{status} [{task['time']}] {task['content']}\n"
 
-        yield event.plain_result(msg)
+        yield event.plain_result(group_id + msg)
 
     @reminder_commands.command("清空")
     async def clear_tasks(self, event: AstrMessageEvent):
