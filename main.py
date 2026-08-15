@@ -141,12 +141,13 @@ class ListReminderPlugin(Star):
             return
 
         # 创建任务
+        due_timestamp = datetime.fromisoformat(task_info["time"])
         task_id = self.task_manager_new.create_task(
             creator=sender_id,
             umo=umo,
             group_id=group_id,
             content=task_info["content"],
-            due_time=task_info["time"],
+            due_time=due_timestamp.timestamp(),
         )
 
         if task_id:

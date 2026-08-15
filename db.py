@@ -11,8 +11,9 @@ from astrbot.api import logger
 @dataclass
 class Task:
     task_id: int
-    target_id: str
+    creator: str
     umo: str
+    group_id: str
     content: str
     due_time: int
     completed: bool
@@ -50,7 +51,12 @@ class TaskDB:
         return conn
 
     def add_task(
-        self, creator: str, umo: str, group_id: str | None, content: str, due_time: int
+        self,
+        creator: str,
+        umo: str,
+        group_id: str | None,
+        content: str,
+        due_time: float,
     ) -> int:
         """
         将任务添加到数据库中
@@ -60,7 +66,7 @@ class TaskDB:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                    insert into Tasks (creator, umo, group_id, content, due_time) VALUES (?, ?, ?, ?)
+                    insert into Tasks (creator, umo, group_id, content, due_time) VALUES (?, ?, ?, ?, ?)
                 """,
                 (creator, umo, group_id, content, due_time),
             )
@@ -114,6 +120,8 @@ class TaskDB:
                 (umo,),
             )
         rows: List[s3.Row] = cursor.fetchall()
+        for row in rows:
+            logger.info(row)
         return [Task(*row) for row in rows]
 
     def get_pending_task_ids_with_due_time(self):

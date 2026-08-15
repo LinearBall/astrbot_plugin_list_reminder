@@ -18,7 +18,7 @@ class TaskManagerNew:
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
     def create_task(
-        self, creator: str, umo: str, group_id: str | None, content: str, due_time: int
+        self, creator: str, umo: str, group_id: str | None, content: str, due_time: float
     ) -> int:
         """
         创建一个新任务，并开始倒计时
@@ -43,7 +43,7 @@ class TaskManagerNew:
             ):
                 self.active_timers[task_id] = count_down_task
 
-    def count_down_to_remind(self, task_id: int, due_time: int) -> asyncio.Task | None:
+    def count_down_to_remind(self, task_id: int, due_time: float) -> asyncio.Task | None:
         """
         检查倒计时时长，若为正，则启动新协程进行倒计时
         """
