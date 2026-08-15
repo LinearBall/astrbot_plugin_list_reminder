@@ -3,7 +3,6 @@ import json
 import secrets
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import hypercorn.asyncio
 from hypercorn.config import Config
@@ -12,12 +11,13 @@ from quart import Quart, jsonify, redirect, render_template, request, session, u
 from astrbot.api import logger
 
 from .config import GROUPS_DIR, USERS_DIR
+from .task_manager import TaskManager
 
 app = Quart(__name__)
 
 # Runtime state, configured in start_server()
 SERVER_LOGIN_KEY = None
-TASK_MANAGER = None
+TASK_MANAGER: TaskManager | None = None
 
 
 def set_task_manager(task_manager):
@@ -74,9 +74,9 @@ def _cancel_timer(task_id: str) -> None:
 PUBLIC_ENDPOINTS = {"health_check", "login", "static"}
 
 
-class FastAPIResponse(dict):
+class RespTemplate(dict):
     def __init__(self, code: int, **kwargs):
-        super().__init__(code=code)
+        super().__init__()
         self.code = code
         self.payload = kwargs
 
@@ -91,7 +91,7 @@ async def check_if_logged_in():
         return None
     elif request.path.startswith("/api/"):
         # return jsonify({"code": 401, "payload": {"message": "未登录"}})
-        return jsonify(FastAPIResponse(401, message="未登录"))
+        return jsonify(RespTemplate(401, message="未登录").to_dict())
     elif request.endpoint not in PUBLIC_ENDPOINTS:
         return redirect(url_for("login"))
     return None
@@ -102,7 +102,7 @@ async def check_if_logged_in():
 
 @app.route("/health")
 async def health_check():
-    return jsonify(FastAPIResponse(200, status="running"))
+    return jsonify(RespTemplate(200, status="running").to_dict())
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -200,7 +200,7 @@ async def create_task():
                 }
             )
     else:
-        umo = umo or target_id
+        umo = umo or target_id #! 重要！回信全靠它
 
     # Normalize datetime-local input (e.g. 2024-01-01T15:00) to ISO with seconds.
     if "T" in task_time and task_time.count(":") == 1:

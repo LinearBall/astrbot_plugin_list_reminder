@@ -3,14 +3,15 @@ import json
 import re
 import secrets
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, TypedDict
 
 from dateutil import parser as dateutil_parser
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.core.message.message_event_result import MessageChain
+
+# from astrbot.core.message.message_event_result import MessageChain
 
 from .task_manager import TaskManager
 
@@ -18,11 +19,19 @@ from . import webui
 from .config import GROUPS_DIR, USERS_DIR
 
 
+class ReminderConfig(TypedDict):
+    max_tasks_per_user: int
+    llm_provider_id: str
+    schedule_detection_llm: str
+    webui_port: int
+    server_key: str
+
+
 @register("list_reminder", "LinearBall", "智能列表式任务管理插件", "1.1.1")
 class ListReminderPlugin(Star):
     """智能任务管理插件 - 支持用户和群组任务"""
 
-    def __init__(self, context: Context, config: dict):
+    def __init__(self, context: Context, config: ReminderConfig):
         super().__init__(context)
         self.config = config or {}
         self.task_manager = TaskManager(USERS_DIR, GROUPS_DIR, self.context)
