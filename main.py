@@ -11,12 +11,12 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-# from astrbot.core.message.message_event_result import MessageChain
-
-from .task_manager import TaskManager
-
-from . import webui
+from . import webui, webui_new
 from .config import GROUPS_DIR, USERS_DIR
+from .task_manager import TaskManager
+from .task_manager_new import TaskManagerNew
+
+# from astrbot.core.message.message_event_result import MessageChain
 
 
 class ReminderConfig(TypedDict):
@@ -34,7 +34,8 @@ class ListReminderPlugin(Star):
     def __init__(self, context: Context, config: ReminderConfig):
         super().__init__(context)
         self.config = config or {}
-        self.task_manager = TaskManager(USERS_DIR, GROUPS_DIR, self.context)
+        # self.task_manager = TaskManager(USERS_DIR, GROUPS_DIR, self.context)
+        self.task_manager_new = TaskManagerNew(self.context)
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.llm_provider_id = self.config.get("llm_provider_id")
@@ -46,12 +47,12 @@ class ListReminderPlugin(Star):
         self.webui_port = self.config.get("webui_port", 5001)
 
         # 设置task_manager引用到webui
-        webui.set_task_manager(self.task_manager)
+        webui_new.set_tm(self.task_manager_new)
 
     async def initialize(self):
         """插件初始化"""
         logger.info("ListReminderPlugin 正在加载...")
-        await self.task_manager.load_pending_tasks()
+        await self.task_manager_new.count_down_for_pending_tasks_immediately()
         logger.info("ListReminderPlugin 加载完成")
 
     @filter.command_group("列表提醒")
@@ -66,9 +67,9 @@ class ListReminderPlugin(Star):
     @reminder_commands.command("列表")
     async def list_tasks(self, event: AstrMessageEvent):
         """列出任务"""
-        user_id = event.unified_msg_origin
+        umo = event.unified_msg_origin
         group_id = event.get_group_id()
-        tasks = await self.task_manager.get_tasks(user_id)
+        tasks = self.task_manager_new.get_tasks_by_umo(umo)
 
         if not tasks:
             yield event.plain_result(group_id + "📝 您当前没有待办任务")
@@ -76,16 +77,16 @@ class ListReminderPlugin(Star):
 
         msg = "📝 您的任务列表：\n"
         for task in tasks:
-            status = "✅" if task.get("completed") else "⏰"
-            msg += f"{status} [{task['time']}] {task['content']}\n"
+            status = "✅" if task.completed else "⏰"
+            msg += f"{status} [{task.due_time}] {task.content}\n"
 
         yield event.plain_result(group_id + msg)
 
     @reminder_commands.command("清空")
     async def clear_tasks(self, event: AstrMessageEvent):
         """清空所有任务"""
-        user_id = event.unified_msg_origin
-        await self.task_manager.clear_tasks(user_id)
+        umo = event.unified_msg_origin
+        self.task_manager_new.clear_tasks_by_umo(umo)
         yield event.plain_result("🗑️ 任务列表已清空")
 
     @reminder_commands.command("后台")
@@ -107,7 +108,7 @@ class ListReminderPlugin(Star):
         webui_config = self.config.copy()
         webui_config["server_key"] = sv_key4sender
         self.webui_task = asyncio.create_task(
-            webui.start_server(webui_config, self.task_manager)
+            webui.start_server(webui_config, self.task_manager_new)
         )
 
         yield event.plain_result(
@@ -118,6 +119,9 @@ class ListReminderPlugin(Star):
     async def on_message(self, event: AstrMessageEvent):
         """监听消息，智能识别任务需求"""
         msg = event.message_str
+        sender_id = event.get_sender_id()
+        umo = event.unified_msg_origin
+        group_id = event.get_group_id() or None
 
         # 使用LLM判断是否为提醒意图
         if not await self._is_reminder_intent(msg, event):
@@ -137,13 +141,12 @@ class ListReminderPlugin(Star):
             return
 
         # 创建任务
-        task_id = await self.task_manager.create_task(
-            target_id=target_id,
-            is_group=is_group,
+        task_id = self.task_manager_new.create_task(
+            creator=sender_id,
+            umo=umo,
+            group_id=group_id,
             content=task_info["content"],
-            task_time=task_info["time"],
-            creator=event.session_id,
-            umo=event.unified_msg_origin,
+            due_time=task_info["time"],
         )
 
         if task_id:

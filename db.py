@@ -14,7 +14,7 @@ class Task:
     target_id: str
     umo: str
     content: str
-    due_date: int
+    due_time: int
     completed: bool
 
 
@@ -115,3 +115,15 @@ class TaskDB:
             )
         rows: List[s3.Row] = cursor.fetchall()
         return [Task(*row) for row in rows]
+
+    def get_pending_task_ids_with_due_time(self):
+        """
+        获取所有未完成的任务ID和到期时间
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select task_id, due_time from Tasks where completed = 0",
+            )
+        rows: List[s3.Row] = cursor.fetchall()
+        return [(row[0], row[1]) for row in rows]
