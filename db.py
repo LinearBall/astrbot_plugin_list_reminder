@@ -13,7 +13,6 @@ class Task:
     task_id: int
     creator: str
     umo: str
-    group_id: str
     content: str
     due_time: int
     completed: bool
@@ -24,7 +23,6 @@ class TaskDB:
     存储所有任务的数据库。
     * 重要提示: creator由event.get_sender_id()获取
     * 重要提示: umo 唯一标识一个聊天窗口，可能是私聊或群聊
-    * 重要提示: group_id 为 None 时，任务为私聊中布置的，否则为群聊中布置的
     """
 
     def __init__(self) -> None:
@@ -42,19 +40,22 @@ class TaskDB:
                 task_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 creator TEXT NOT NULL,
                 umo TEXT NOT NULL,
-                group_id TEXT,
                 content TEXT NOT NULL,
                 due_time INTEGER NOT NULL,
                 completed INTEGER DEFAULT 0
             )
         """)
+        # 迁移：删除旧版遗留的 group_id 列
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(Tasks)")}
+        if "group_id" in columns:
+            conn.execute("ALTER TABLE Tasks DROP COLUMN group_id")
+        conn.commit()
         return conn
 
     def add_task(
         self,
         creator: str,
         umo: str,
-        group_id: str | None,
         content: str,
         due_time: float,
     ) -> int:
@@ -66,9 +67,9 @@ class TaskDB:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                    insert into Tasks (creator, umo, group_id, content, due_time) VALUES (?, ?, ?, ?, ?)
+                    insert into Tasks (creator, umo, content, due_time) VALUES (?, ?, ?, ?)
                 """,
-                (creator, umo, group_id, content, due_time),
+                (creator, umo, content, due_time),
             )
             new_task_id = cursor.lastrowid
         assert new_task_id is not None
@@ -101,12 +102,34 @@ class TaskDB:
                 (task_id,),
             )
 
+    def delete_task(self, task_id: int):
+        """
+        删除指定任务
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "delete from Tasks where task_id = ?",
+                (task_id,),
+            )
+
     def clear_tasks_by_umo(self, umo: str):
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "delete from Tasks where umo = ?",
                 (umo,),
+            )
+
+    def clear_tasks_by_sender_id(self, sender_id: str):
+        """
+        删除指定用户创建的所有任务
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "delete from Tasks where creator = ?",
+                (sender_id,),
             )
 
     def get_tasks_by_umo(self, umo: str) -> List[Task]:
@@ -122,6 +145,19 @@ class TaskDB:
         rows: List[s3.Row] = cursor.fetchall()
         for row in rows:
             logger.info(row)
+        return [Task(*row) for row in rows]
+
+    def get_tasks_by_creator(self, creator: str) -> List[Task]:
+        """
+        获取指定用户创建的所有任务
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select * from Tasks where creator = ?",
+                (creator,),
+            )
+        rows: List[s3.Row] = cursor.fetchall()
         return [Task(*row) for row in rows]
 
     def get_pending_task_ids_with_due_time(self):

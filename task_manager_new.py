@@ -18,12 +18,12 @@ class TaskManagerNew:
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
     def create_task(
-        self, creator: str, umo: str, group_id: str | None, content: str, due_time: float
+        self, creator: str, umo: str, content: str, due_time: float
     ) -> int:
         """
         创建一个新任务，并开始倒计时
         """
-        new_task_id = self.db.add_task(creator, umo, group_id, content, due_time)
+        new_task_id = self.db.add_task(creator, umo, content, due_time)
         if (
             count_down_task := self.count_down_to_remind(new_task_id, due_time)
         ) is not None:
@@ -80,3 +80,18 @@ class TaskManagerNew:
         for task in tasks_to_clear:
             del self.active_timers[task.task_id]
         self.db.clear_tasks_by_umo(umo)
+
+    def get_tasks_by_creator(self, creator: str) -> List[Task]:
+        """
+        获取指定用户创建的所有任务
+        """
+        return self.db.get_tasks_by_creator(creator)
+
+    def clear_tasks_by_sender_id(self, sender_id: str):
+        """
+        清空指定用户创建的所有任务
+        """
+        tasks_to_clear = self.get_tasks_by_creator(sender_id)
+        for task in tasks_to_clear:
+            del self.active_timers[task.task_id]
+        self.db.clear_tasks_by_sender_id(sender_id)

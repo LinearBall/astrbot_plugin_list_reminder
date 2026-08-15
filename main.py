@@ -1,9 +1,8 @@
 ﻿import asyncio
 import json
 import re
-import secrets
 from datetime import datetime, timedelta
-from typing import Dict, TypedDict
+from typing import TypedDict
 
 from dateutil import parser as dateutil_parser
 
@@ -12,7 +11,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from . import webui, webui_new
-from .config import GROUPS_DIR, USERS_DIR
+from .config import USERS_DIR
 from .task_manager import TaskManager
 from .task_manager_new import TaskManagerNew
 
@@ -43,10 +42,10 @@ class ListReminderPlugin(Star):
 
         # WebUI
         self.webui_task: asyncio.Task | None = None
-        self.server_keys: Dict[str, str] = dict()
         self.webui_port = self.config.get("webui_port", 5001)
 
         # 设置task_manager引用到webui
+        webui.set_task_manager(self.task_manager_new)
         webui_new.set_tm(self.task_manager_new)
 
     async def initialize(self):
@@ -67,12 +66,11 @@ class ListReminderPlugin(Star):
     @reminder_commands.command("列表")
     async def list_tasks(self, event: AstrMessageEvent):
         """列出任务"""
-        umo = event.unified_msg_origin
-        group_id = event.get_group_id()
-        tasks = self.task_manager_new.get_tasks_by_umo(umo)
+        sender_id = event.get_sender_id()
+        tasks = self.task_manager_new.get_tasks_by_creator(sender_id)
 
         if not tasks:
-            yield event.plain_result(group_id + "📝 您当前没有待办任务")
+            yield event.plain_result("📝 您当前没有待办任务")
             return
 
         msg = "📝 您的任务列表：\n"
@@ -80,13 +78,13 @@ class ListReminderPlugin(Star):
             status = "✅" if task.completed else "⏰"
             msg += f"{status} [{task.due_time}] {task.content}\n"
 
-        yield event.plain_result(group_id + msg)
+        yield event.plain_result(msg)
 
     @reminder_commands.command("清空")
     async def clear_tasks(self, event: AstrMessageEvent):
         """清空所有任务"""
-        umo = event.unified_msg_origin
-        self.task_manager_new.clear_tasks_by_umo(umo)
+        sender_id = event.get_sender_id()
+        self.task_manager_new.clear_tasks_by_sender_id(sender_id)
         yield event.plain_result("🗑️ 任务列表已清空")
 
     @reminder_commands.command("后台")
@@ -94,25 +92,15 @@ class ListReminderPlugin(Star):
         """开启后台管理界面"""
         # 识别当前用户？
         sender_id = event.get_sender_id()
-        sv_key4sender = self.server_keys.get(sender_id, secrets.token_urlsafe(16))
-
-        # 若WebUI已经在运行，则不重复启动WebUI服务器
-        if self.webui_task is not None and not self.webui_task.done():
-            # if self.webui_thread and self.webui_thread.is_alive():
-            yield event.plain_result(
-                f"⚠️ 后台管理界面已在运行中\n访问地址: http://localhost:{self.webui_port}\n登录密钥: {sv_key4sender}"
+        # 服务器未运行才启动（不再需要传 server_key）
+        if self.webui_task is None or self.webui_task.done():
+            self.webui_task = asyncio.create_task(
+                webui.start_server(self.config, self.task_manager_new)
             )
-            return
-
-        # 启动webui
-        webui_config = self.config.copy()
-        webui_config["server_key"] = sv_key4sender
-        self.webui_task = asyncio.create_task(
-            webui.start_server(webui_config, self.task_manager_new)
-        )
-
+        # 为当前用户注册个人密钥（绑定 sender_id）
+        key = webui.issue_login_key(sender_id)
         yield event.plain_result(
-            f"✅ 后台管理界面已启动\n访问地址: http://localhost:{self.webui_port}\n登录密钥: {sv_key4sender}"
+            f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
         )
 
     @filter.event_message_type(filter.EventMessageType.ALL)
@@ -121,16 +109,10 @@ class ListReminderPlugin(Star):
         msg = event.message_str
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
-        group_id = event.get_group_id() or None
 
         # 使用LLM判断是否为提醒意图
         if not await self._is_reminder_intent(msg, event):
             return
-
-        # 确定目标ID（用户或群组）
-        group_id = event.get_group_id()
-        target_id = group_id if group_id else event.unified_msg_origin
-        is_group = bool(group_id)
 
         # 使用LLM提取任务信息
         task_info = await self._extract_task(msg, event)
@@ -145,7 +127,6 @@ class ListReminderPlugin(Star):
         task_id = self.task_manager_new.create_task(
             creator=sender_id,
             umo=umo,
-            group_id=group_id,
             content=task_info["content"],
             due_time=due_timestamp.timestamp(),
         )

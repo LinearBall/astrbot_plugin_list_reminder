@@ -21,16 +21,8 @@ class RespTemplate(dict):
 
 
 @dataclass
-class GroupId:
-    val: str
-
-
-@dataclass
 class Umo:
     val: str
-
-
-MsgRecverId = Union[GroupId, Umo]
 
 
 @dataclass
@@ -38,7 +30,6 @@ class Task:
     task_id: int
     creator: str
     umo: str
-    group_id: str
     content: str
     due_time: int
     completed: bool

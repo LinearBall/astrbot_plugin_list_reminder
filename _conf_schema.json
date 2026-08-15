@@ -29,6 +29,18 @@
     "default": 5001,
     "hint": "后台管理界面的端口号"
   },
+  "webui_public_ip": {
+    "description": "WebUI公网IP",
+    "type": "string",
+    "default": "",
+    "hint": "手动填写服务器公网 IP，留空则自动探测公网 IP"
+  },
+  "admin_sender_ids": {
+    "description": "管理员 sender_id 列表",
+    "type": "list",
+    "hint": "拥有管理员权限的用户 sender_id，管理员后台可见所有任务并可批量管理",
+    "default": []
+  },
   "server_key": {
     "description": "WebUI登录密钥",
     "type": "string",
