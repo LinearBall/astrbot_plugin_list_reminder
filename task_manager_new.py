@@ -6,7 +6,7 @@ from astrbot.api import logger
 from astrbot.api.star import Context
 from astrbot.core.message.message_event_result import MessageChain
 
-from .db import Task, TaskDB
+from .db import TagDB, Task, TaskDB, UserDB
 
 
 class TaskManagerNew:
@@ -15,6 +15,8 @@ class TaskManagerNew:
     def __init__(self, context: Context):
         self.context = context
         self.db = TaskDB()
+        self.user_db = UserDB(self.db)
+        self.tag_db = TagDB(self.db)
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
     def create_task(
