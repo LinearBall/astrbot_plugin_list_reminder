@@ -1,19 +1,35 @@
 import sqlite3 as s3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from astrbot.api import logger
+from pydantic import BaseModel, field_serializer
 
 
-@dataclass
-class Task:
+class Task(BaseModel):
     task_id: int
     creator: str
     umo: str
     content: str
     due_time: int
     completed: bool
+
+    @field_serializer("due_time")
+    def serialize_due_time(self, due_time: int) -> str:
+        return datetime.fromtimestamp(self.due_time).strftime("%Y-%m-%dT%H:%M:%S")
+
+    @staticmethod
+    def from_db_row(row: s3.Row) -> "Task":
+        return Task(
+            task_id=row[0],
+            creator=row[1],
+            umo=row[2],
+            content=row[3],
+            due_time=row[4],
+            completed=row[5],
+        )
 
 
 class TaskDB:
@@ -87,7 +103,7 @@ class TaskDB:
         if row is None:
             logger.error("任务 {} 不存在".format(task_id))
             return None
-        return Task(*row)
+        return Task.from_db_row(row)
 
     def mark_task_as_completed(self, task_id: int):
         """
@@ -143,7 +159,7 @@ class TaskDB:
         rows: List[s3.Row] = cursor.fetchall()
         for row in rows:
             logger.info(row)
-        return [Task(*row) for row in rows]
+        return [Task.from_db_row(row) for row in rows]
 
     def get_tasks_by_creator(self, creator: str) -> List[Task]:
         """
@@ -156,7 +172,7 @@ class TaskDB:
                 (creator,),
             )
         rows: List[s3.Row] = cursor.fetchall()
-        return [Task(*row) for row in rows]
+        return [Task.from_db_row(row) for row in rows]
 
     def get_pending_task_ids_with_due_time(self):
         """

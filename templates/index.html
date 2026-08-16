@@ -93,7 +93,7 @@ async function loadTasks() {
     const r = await fetch("/api/tasks");
     if (r.status === 401) { window.location.href = "/login"; return; }
     const d = await r.json();
-    renderList("task_list", d.tasks || []);
+    renderList("task_list", (d.payload && d.payload.tasks) || []);
   } catch (e) {
     showMsg("加载失败: " + e.message, "error");
   }
@@ -129,14 +129,16 @@ async function createTask() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ umo: umo, time: time, content: content })
     });
+    if (r.status === 401) { window.location.href = "/login"; return; }
     const d = await r.json();
-    if (d.success) {
-      showMsg(d.message, "success");
+    const payload = d.payload || {};
+    if (d.code === 200) {
+      showMsg(payload.message || "创建成功", "success");
       document.getElementById("task_time").value = "";
       document.getElementById("task_content").value = "";
       loadTasks();
     } else {
-      showMsg(d.message, "error");
+      showMsg(payload.message || "创建失败", "error");
     }
   } catch (e) {
     showMsg("创建失败: " + e.message, "error");
@@ -147,9 +149,11 @@ async function deleteTask(id) {
   if (!confirm("确认删除任务 " + id + " ？")) return;
   try {
     const r = await fetch("/api/tasks/" + encodeURIComponent(id), { method: "DELETE" });
+    if (r.status === 401) { window.location.href = "/login"; return; }
     const d = await r.json();
-    if (d.success) { showMsg(d.message, "success"); loadTasks(); }
-    else { showMsg(d.message, "error"); }
+    const payload = d.payload || {};
+    if (d.code === 200) { showMsg(payload.message || "删除成功", "success"); loadTasks(); }
+    else { showMsg(payload.message || "删除失败", "error"); }
   } catch (e) {
     showMsg("删除失败: " + e.message, "error");
   }

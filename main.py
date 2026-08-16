@@ -87,7 +87,12 @@ class ListReminderPlugin(Star):
 
     @reminder_commands.command("后台")
     async def open_webui(self, event: AstrMessageEvent):
-        """开启后台管理界面"""
+        """
+        开启后台管理界面。副作用包括：
+        - 启动协程，Host前端给用户访问
+        - 为当前用户分配新的个人密钥，并注册到`LOGIN_KEYS`，以供登陆验证用
+        """
+
         # 识别当前用户？
         sender_id = event.get_sender_id()
         # 服务器未运行才启动（不再需要传 server_key）
@@ -95,7 +100,7 @@ class ListReminderPlugin(Star):
             self.webui_task = asyncio.create_task(
                 webui.start_server(self.config, self.task_manager_new)
             )
-        # 为当前用户注册个人密钥（绑定 sender_id）
+        # 为当前用户注册新的个人密钥（绑定 sender_id）
         key = webui.issue_login_key(sender_id)
         yield event.plain_result(
             f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
