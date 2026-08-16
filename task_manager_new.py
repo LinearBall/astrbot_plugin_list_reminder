@@ -45,7 +45,7 @@ class TaskManagerNew:
 
     def count_down_to_remind(self, task_id: int, due_time: float) -> asyncio.Task | None:
         """
-        检查倒计时时长，若为正，则启动新协程进行倒计时
+        检查倒计时时长。若为正，则启动新协程进行倒计时，并返回该协程；否则返回None
         """
         cur_time = datetime.now().timestamp()
         delay = due_time - cur_time

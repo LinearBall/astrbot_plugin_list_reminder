@@ -10,9 +10,8 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from . import webui, webui_new
+from . import webui
 from .config import USERS_DIR
-from .task_manager import TaskManager
 from .task_manager_new import TaskManagerNew
 
 # from astrbot.core.message.message_event_result import MessageChain
@@ -46,7 +45,6 @@ class ListReminderPlugin(Star):
 
         # 设置task_manager引用到webui
         webui.set_task_manager(self.task_manager_new)
-        webui_new.set_tm(self.task_manager_new)
 
     async def initialize(self):
         """插件初始化"""
