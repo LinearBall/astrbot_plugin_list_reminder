@@ -94,13 +94,14 @@ class ListReminderPlugin(Star):
 
         # 识别当前用户？
         sender_id = event.get_sender_id()
-        # 服务器未运行才启动（不再需要传 server_key）
-        if self.webui_task is None or self.webui_task.done():
-            self.webui_task = asyncio.create_task(
-                webui.start_server(self.config, self.task_manager_new)
-            )
+        # 先取消已有的任务，确保只启动一个实例
+        if self.webui_task and not self.webui_task.done():
+            self.webui_task.cancel()
         # 为当前用户注册新的个人密钥（绑定 sender_id）
         key = webui.issue_login_key(sender_id)
+        self.webui_task = asyncio.create_task(
+            webui.start_server(self.config, self.task_manager_new)
+        )
         yield event.plain_result(
             f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
         )

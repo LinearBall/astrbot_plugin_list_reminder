@@ -16,10 +16,6 @@ class Task(BaseModel):
     due_time: int
     completed: bool
 
-    @field_serializer("due_time")
-    def serialize_due_time(self, due_time: int) -> str:
-        return datetime.fromtimestamp(self.due_time).strftime("%Y-%m-%dT%H:%M:%S")
-
     @staticmethod
     def from_db_row(row: s3.Row) -> "Task":
         return Task(

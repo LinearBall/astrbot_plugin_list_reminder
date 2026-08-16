@@ -34,6 +34,7 @@ def issue_login_key(sender_id: str) -> str:
     Returns:
         The generated key string.
     """
+    global LOGIN_KEYS
     key = secrets.token_urlsafe(16)
     LOGIN_KEYS[key] = sender_id
     return key
@@ -55,7 +56,7 @@ def current_session_sender_id() -> str | None:
 # --- Auth ---
 
 PUBLIC_ENDPOINTS = {"health_check", "login", "static"}
-PUBLIC_API_ENDPOINTS = {"api_health", "api_login", "api_logout"}
+PUBLIC_API_ENDPOINTS = {"api_health", "api_login", "api_logout", "api_me"}
 
 
 def __make_json_response(code: int, **payload):
@@ -80,7 +81,7 @@ async def check_if_logged_in():
     if request.path.startswith("/api/"):
         if request.endpoint in PUBLIC_API_ENDPOINTS:
             return None
-        return api_error(401, "未登录")
+        return api_error(401, "未登录！")
     if request.endpoint not in PUBLIC_ENDPOINTS:
         return redirect(url_for("login"))
     return None
@@ -238,7 +239,7 @@ async def start_server(config=None, task_manager=None):
     port = config.get("webui_port", 5001)
     if task_manager is not None:
         TASK_MANAGER = task_manager
-    APP.secret_key = secrets.token_urlsafe(32)
+    APP.secret_key = secrets.token_urlsafe(32)  # 听说是用于session加密的密钥
 
     hypercorn_config = Config()
     hypercorn_config.bind = [f"0.0.0.0:{port}"]
