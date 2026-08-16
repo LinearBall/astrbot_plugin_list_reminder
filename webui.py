@@ -1,6 +1,5 @@
 import asyncio
 import secrets
-from datetime import datetime
 from typing import Dict, List
 
 import hypercorn.asyncio
@@ -8,8 +7,8 @@ from astrbot.api import logger
 from hypercorn.config import Config
 from quart import Quart, jsonify, redirect, render_template, request, session, url_for
 
-from db import Task
-
+from .db import Task
+import pydantic
 from .shared_types import LoginPayload
 from .task_manager_new import TaskManagerNew
 
@@ -77,6 +76,7 @@ def api_error(code: int, message: str, **extra):
 async def check_if_logged_in():
     if current_session_sender_id():
         return None
+    # 区分api访问和原版访问
     if request.path.startswith("/api/"):
         if request.endpoint in PUBLIC_API_ENDPOINTS:
             return None
@@ -91,11 +91,6 @@ async def check_if_logged_in():
 
 @APP.route("/health")
 async def health_check():
-    return api_success(status="running")
-
-
-@APP.route("/api/health", methods=["GET"])
-async def api_health():
     return api_success(status="running")
 
 
@@ -125,6 +120,11 @@ async def index():
 
 
 # --- API ---
+
+
+@APP.route("/api/health", methods=["GET"])
+async def api_health():
+    return api_success(status="running")
 
 
 @APP.route("/api/login", methods=["POST"])
@@ -187,24 +187,24 @@ async def create_task():
     if not sender_id:
         return api_error(401, "未登录")
 
-    data: Task = await request.get_json(silent=True)  # todo: 规范数据格式
+    # 尝试获取前端传来的数据，并进行检验
+    try:
+        data: Task = await request.get_json(silent=True)  # todo: 规范数据格式
+    except pydantic.ValidationError:
+        return api_error(400, "内容、时间、umo 不能为空")
     content = data.content.strip()
     due_time = data.due_time
     umo = data.umo.strip()
 
-    if not content or not due_time or not umo:
-        return api_error(400, "内容、时间、umo 不能为空")
-
-    try:
-        task_id = tm.create_task(
-            creator=sender_id,
-            umo=umo,
-            content=content,
-            due_time=due_time,
-        )
-    except Exception as e:
-        logger.error(f"WebUI 创建任务失败: {e}")
-        return api_error(500, f"创建失败: {e}")
+    task_id = tm.create_task(
+        creator=sender_id,
+        umo=umo,
+        content=content,
+        due_time=due_time,
+    )
+    if task_id == -1:
+        logger.error(f"WebUI 创建任务失败")
+        return api_error(500, f"创建失败：任务到期时间太早")
 
     return api_success(message="任务创建成功", task_id=task_id)
 

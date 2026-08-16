@@ -73,8 +73,7 @@ class ListReminderPlugin(Star):
 
         msg = "📝 您的任务列表：\n"
         for task in tasks:
-            status = "✅" if task.completed else "⏰"
-            msg += f"{status} [{task.due_time}] {task.content}\n"
+            msg += task.to_friendly() + "\n"
 
         yield event.plain_result(msg)
 

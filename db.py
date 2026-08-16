@@ -31,6 +31,11 @@ class Task(BaseModel):
             completed=row[5],
         )
 
+    def to_friendly(self) -> str:
+        frdly_status = "✅" if self.completed else "⏰"
+        frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
+        return "{} [{}] {}".format(frdly_status, frdly_due_time, self.content)
+
 
 class TaskDB:
     """

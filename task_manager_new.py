@@ -21,14 +21,15 @@ class TaskManagerNew:
         self, creator: str, umo: str, content: str, due_time: float
     ) -> int:
         """
-        创建一个新任务，并开始倒计时
+        创建一个新任务，并开始倒计时。若创建失败，则返回-1
         """
         new_task_id = self.db.add_task(creator, umo, content, due_time)
         if (
             count_down_task := self.count_down_to_remind(new_task_id, due_time)
         ) is not None:
             self.active_timers[new_task_id] = count_down_task
-        return new_task_id
+            return new_task_id
+        return -1
 
     async def count_down_for_pending_tasks_immediately(self):
         """
