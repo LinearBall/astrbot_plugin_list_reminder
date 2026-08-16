@@ -10,12 +10,11 @@ from astrbot.api import logger
 
 from .task_manager_new import TaskManagerNew
 
-app = Quart(__name__)
-
+APP = Quart(__name__)
 # Runtime state, configured in start_server()
 TASK_MANAGER: TaskManagerNew | None = None
 # Active per-user login keys: {key: {"sender_id": str}}
-_LOGIN_KEYS: dict[str, dict] = {}
+LOGIN_KEYS: dict[str, dict] = {}
 
 
 def set_task_manager(task_manager):
@@ -34,21 +33,21 @@ def issue_login_key(sender_id: str) -> str:
         The generated key string.
     """
     key = secrets.token_urlsafe(16)
-    _LOGIN_KEYS[key] = {"sender_id": sender_id}
+    LOGIN_KEYS[key] = {"sender_id": sender_id}
     return key
 
 
-def _current_sender_id() -> str | None:
+def current_session_sender_id() -> str | None:
     """Return the user bound to the current session, or None if invalid.
 
     Every request re-validates against the live key dict, so a revoked key
     immediately invalidates existing sessions.
     """
     key = session.get("login_key")
-    if not key or key not in _LOGIN_KEYS:
+    if not key or key not in LOGIN_KEYS:
         session.clear()
         return None
-    return _LOGIN_KEYS[key]["sender_id"]
+    return LOGIN_KEYS[key]["sender_id"]
 
 
 # --- Auth ---
@@ -66,9 +65,9 @@ class RespTemplate(dict):
         return {"code": self.code, "payload": self.payload}
 
 
-@app.before_request
+@APP.before_request
 async def check_if_logged_in():
-    if _current_sender_id():
+    if current_session_sender_id():
         return None
     elif request.path.startswith("/api/"):
         # return jsonify({"code": 401, "payload": {"message": "未登录"}})
@@ -81,32 +80,32 @@ async def check_if_logged_in():
 # --- Routes ---
 
 
-@app.route("/health")
+@APP.route("/health")
 async def health_check():
     return jsonify(RespTemplate(200, status="running").to_dict())
 
 
-@app.route("/login", methods=["GET", "POST"])
+@APP.route("/login", methods=["GET", "POST"])
 async def login():
-    if _current_sender_id():
+    if current_session_sender_id():
         return redirect(url_for("index"))
     error = None
     if request.method == "POST":
         form = await request.form
-        if form.get("key") in _LOGIN_KEYS:
+        if form.get("key") in LOGIN_KEYS:
             session["login_key"] = form.get("key")
             return redirect(url_for("index"))
         error = "密钥错误，请重试。"
     return await render_template("login.html", error=error)
 
 
-@app.route("/logout", methods=["POST"])
+@APP.route("/logout", methods=["POST"])
 async def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
-@app.route("/")
+@APP.route("/")
 async def index():
     return await render_template("index.html")
 
@@ -126,12 +125,12 @@ def _serialize_task(task) -> dict:
 # --- API ---
 
 
-@app.route("/api/tasks", methods=["GET"])
+@APP.route("/api/tasks", methods=["GET"])
 async def list_tasks():
     tm = TASK_MANAGER
     if tm is None:
         return jsonify({"tasks": []})
-    sender_id = _current_sender_id()
+    sender_id = current_session_sender_id()
     if not sender_id:
         return jsonify(RespTemplate(401, message="未登录").to_dict())
     tasks = tm.db.get_tasks_by_creator(sender_id)
@@ -139,12 +138,12 @@ async def list_tasks():
     return jsonify({"tasks": [_serialize_task(t) for t in tasks]})
 
 
-@app.route("/api/tasks", methods=["POST"])
+@APP.route("/api/tasks", methods=["POST"])
 async def create_task():
     tm = TASK_MANAGER
     if tm is None:
         return (jsonify({"success": False, "message": "任务管理器不可用"}), 503)
-    sender_id = _current_sender_id()
+    sender_id = current_session_sender_id()
     if not sender_id:
         return jsonify(RespTemplate(401, message="未登录").to_dict())
 
@@ -180,12 +179,12 @@ async def create_task():
     return jsonify({"success": True, "message": "任务创建成功", "task_id": task_id})
 
 
-@app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
+@APP.route("/api/tasks/<int:task_id>", methods=["DELETE"])
 async def delete_task(task_id):
     tm = TASK_MANAGER
     if tm is None:
         return (jsonify({"success": False, "message": "任务管理器不可用"}), 503)
-    sender_id = _current_sender_id()
+    sender_id = current_session_sender_id()
     if not sender_id:
         return jsonify(RespTemplate(401, message="未登录").to_dict())
 
@@ -209,7 +208,7 @@ async def start_server(config=None, task_manager=None):
     port = config.get("webui_port", 5001)
     if task_manager is not None:
         TASK_MANAGER = task_manager
-    app.secret_key = secrets.token_urlsafe(32)
+    APP.secret_key = secrets.token_urlsafe(32)
 
     hypercorn_config = Config()
     hypercorn_config.bind = [f"0.0.0.0:{port}"]
@@ -219,5 +218,5 @@ async def start_server(config=None, task_manager=None):
     # setup, which crashes in a non-main thread on Windows.
     shutdown_event = asyncio.Event()
     await hypercorn.asyncio.serve(
-        app, hypercorn_config, shutdown_trigger=shutdown_event.wait
+        APP, hypercorn_config, shutdown_trigger=shutdown_event.wait
     )
