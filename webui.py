@@ -17,6 +17,7 @@ APP = Quart(__name__)
 TASK_MANAGER: TaskManagerNew | None = None
 # Active per-user login keys. Format = {key: sender_id}
 LOGIN_KEYS: Dict[str, str] = dict()
+SENDER_ID2UMO: Dict[str, str] = dict()
 
 
 def set_task_manager(task_manager):
@@ -38,6 +39,17 @@ def issue_login_key(sender_id: str) -> str:
     key = secrets.token_urlsafe(16)
     LOGIN_KEYS[key] = sender_id
     return key
+
+
+def register_umo_to_sender(sender_id: str, umo_id: str):
+    """将sender_id绑定到umo_id。
+
+    Args:
+        sender_id: 用户ID。
+        umo_id: UMO ID。
+    """
+    global SENDER_ID2UMO
+    SENDER_ID2UMO[sender_id] = umo_id
 
 
 def current_session_sender_id() -> str | None:
@@ -190,16 +202,15 @@ async def create_task():
 
     # 尝试获取前端传来的数据，并进行检验
     try:
-        data: Task = await request.get_json(silent=True)  # todo: 规范数据格式
+        data: EditTaskPayload = await request.get_json(silent=True)
     except pydantic.ValidationError:
         return api_error(400, "内容、时间、umo 不能为空")
-    content = data.content.strip()
-    due_time = data.due_time
-    umo = data.umo.strip()
+    content = data["content"].strip()
+    due_time = data["due_time"]
 
     task_id = tm.create_task(
         creator=sender_id,
-        umo=umo,
+        umo=SENDER_ID2UMO[sender_id],
         content=content,
         due_time=due_time,
     )
@@ -239,16 +250,15 @@ async def update_task(task_id):
     if not sender_id:
         return api_error(401, "未登录")
 
-    task = tm.db.get_task_by_id(task_id)
-    if not task or task.creator != sender_id:
-        return api_error(404, "任务未找到或无权限")
-
     data: EditTaskPayload = await request.get_json(silent=True)
     content = data["content"]
     due_time = data["due_time"]
     if not content or not due_time:
         return api_error(400, "内容、到期时间不能为空")
 
+    task = tm.db.get_task_by_id(task_id)
+    if not task or task.creator != sender_id:
+        return api_error(404, "任务未找到或无权限")
     updated_task_id = tm.update_task(task_id, content, due_time)
     if updated_task_id == -1:
         return api_error(500, "更新失败：任务不存在")

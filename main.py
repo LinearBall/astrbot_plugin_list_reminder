@@ -11,7 +11,6 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from . import webui
-from .config import USERS_DIR
 from .task_manager_new import TaskManagerNew
 
 # from astrbot.core.message.message_event_result import MessageChain
@@ -99,6 +98,7 @@ class ListReminderPlugin(Star):
             self.webui_task.cancel()
         # 为当前用户注册新的个人密钥（绑定 sender_id）
         key = webui.issue_login_key(sender_id)
+        webui.register_umo_to_sender(sender_id, event.unified_msg_origin)
         self.webui_task = asyncio.create_task(
             webui.start_server(self.config, self.task_manager_new)
         )

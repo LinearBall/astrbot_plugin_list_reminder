@@ -7,6 +7,7 @@ import { checkIfAlreadyLoggedIn, logout, getTasks, delTaskById, updateTaskById }
 import EditTaskModal from '@/components/EditTaskModal.vue'
 import { NButton, NButtonGroup, NIcon, useMessage } from "naive-ui"
 import { DocumentEdit20Regular, Delete20Regular } from "@vicons/fluent";
+import { RefreshFilled, LogOutFilled, PlusFilled, FolderCopyOutlined } from "@vicons/material";
 
 const router = useRouter()
 const message = useMessage();
@@ -39,14 +40,20 @@ async function handleRemoveTask(taskId: number) {
   delTaskById(taskId).then(res => {
     switch (res.code) {
       case 200:
+        message.success("成功删除任务");
+        refreshTasks();
         break;
       default:
+        message.error(`删除失败(${res.code}): \n${res.payload}`);
         break;
     }
   });
 }
-
-function openEditModal(task: Task) {
+/**
+ * 打开编辑任务的Modal
+ * @param task 要编辑的任务，若为null则表示创建新任务
+ */
+function openEditModal(task: Task | null) {
   editingTask.value = task
   showEditModal.value = true
 }
@@ -69,9 +76,13 @@ async function handleEditSaved(payload: EditTaskPayload) {
       closeEditModal()
       refreshTasks()
     } else {
-      message.error(`Update failed with code ${res.code}: \n${res.payload}`)
+      message.error(`${payload.task_id === -1 ? "创建" : "更新"}任务失败(${res.code}): \n${res.payload}`)
     }
   });
+}
+
+async function handleCompletionStatus(curVal: boolean) {
+  // todo: 发送更新请求到后端更新任务状态
 }
 
 onMounted(async () => {
@@ -94,8 +105,21 @@ onMounted(async () => {
             <span class="todo-count">{{ tasks.length }} 项任务</span>
           </div>
           <n-button-group>
-            <n-button secondary type="primary" @click="refreshTasks">刷新列表</n-button>
-            <n-button secondary type="error" @click="handleLogout">退出登录</n-button>
+            <n-button ghost :bordered="false" type="primary" @click="openEditModal(null)">
+              <n-icon>
+                <PlusFilled />
+              </n-icon>
+            </n-button>
+            <n-button ghost :bordered="false" type="primary" @click="refreshTasks">
+              <n-icon>
+                <RefreshFilled />
+              </n-icon>
+            </n-button>
+            <n-button ghost :bordered="false" type="error" @click="handleLogout">
+              <n-icon>
+                <LogOutFilled />
+              </n-icon>
+            </n-button>
           </n-button-group>
         </div>
       </template>
@@ -106,7 +130,7 @@ onMounted(async () => {
         <n-list-item v-for="task in tasks" :key="task.task_id">
           <hr />
           <div class="task-item">
-            <n-checkbox v-model:checked="task.completed" />
+            <n-checkbox v-model:checked="task.completed" @update:checked="handleCompletionStatus" />
             <div class="task-content">
               <!-- 任务具体内容的文本 -->
               <div class="task-content-text" :class="{ 'is-completed': task.completed }">
@@ -123,13 +147,12 @@ onMounted(async () => {
 
                 <n-button-group>
                   <!-- 编辑按钮和删除按钮 -->
-                  <n-button size="tiny" secondary ghost type="primary" :bordered="false" @click="openEditModal(task)">
+                  <n-button size="tiny" ghost type="primary" :bordered="false" @click="openEditModal(task)">
                     <n-icon>
                       <DocumentEdit20Regular />
                     </n-icon>
                   </n-button>
-                  <n-button size="tiny" secondary ghost type="error" :bordered="false"
-                    @click="handleRemoveTask(task.task_id)">
+                  <n-button size="tiny" ghost type="error" :bordered="false" @click="handleRemoveTask(task.task_id)">
                     <n-icon>
                       <Delete20Regular />
                     </n-icon>

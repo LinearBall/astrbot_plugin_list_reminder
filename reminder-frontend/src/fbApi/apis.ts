@@ -56,10 +56,28 @@ async function delTaskById(taskId: number) {
     return data;
 }
 
+/**
+ * 更新指定任务的内容和截止时间，若任务Id为-1，则创建新任务
+ * @param taskId 任务ID
+ * @param payload 要更新的内容和截止时间
+ * @returns 更新结果
+ */
 async function updateTaskById(taskId: number, payload: Pick<EditTaskPayload, "content" | "due_time">) {
-    let resp = await http.put<ApiResp>(`/api/tasks/${taskId}`, payload);
-    let data = resp.data as ApiResp;
-    return data;
+    if (taskId < 0) {
+        // class EditTaskPayload(TypedDict):
+        // task_id: int
+        // content: str
+        // due_time: int
+        let resp = await http.post<ApiResp>("/api/tasks", {
+            task_id: taskId, // 无所谓
+            content: payload.content,
+            due_time: payload.due_time,
+        });
+        return resp.data as ApiResp;
+    } else {
+        let resp = await http.put<ApiResp>(`/api/tasks/${taskId}`, payload);
+        return resp.data as ApiResp;
+    }
 }
 
 export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById, updateTaskById }
