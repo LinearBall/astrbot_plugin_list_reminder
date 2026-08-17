@@ -7,6 +7,12 @@ export interface Task {
     completed: boolean
 }
 
+export interface EditTaskPayload {
+    task_id: number
+    content: string
+    due_time: number
+}
+
 export interface ApiResp {
     code: number,
     payload: Record<string, any>

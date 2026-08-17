@@ -17,9 +17,7 @@ class TaskManagerNew:
         self.db = TaskDB()
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
-    def create_task(
-        self, creator: str, umo: str, content: str, due_time: float
-    ) -> int:
+    def create_task(self, creator: str, umo: str, content: str, due_time: float) -> int:
         """
         创建一个新任务，并开始倒计时。若创建失败，则返回-1
         """
@@ -30,6 +28,36 @@ class TaskManagerNew:
             self.active_timers[new_task_id] = count_down_task
             return new_task_id
         return -1
+
+    def update_task(self, task_id: int, content: str, due_time: int) -> int:
+        """
+        更新任务内容与到期时间。
+        若任务存在则更新并重设定时器，返回原task_id；否则返回 -1。
+        """
+        task = self.db.get_task_by_id(task_id)
+        if task is None:
+            return -1
+
+        updated = self.db.update_task(task_id, content, due_time)
+        if not updated:
+            return -1
+
+        # 取消旧的定时器，根据新的到期时间重新安排
+        old_timer = self.active_timers.pop(task_id, None)
+        if old_timer and not old_timer.done():
+            old_timer.cancel()
+
+        updated_task = self.db.get_task_by_id(task_id)
+        if (
+            updated_task is not None
+            and not updated_task.completed
+            and due_time > datetime.now().timestamp()
+        ):
+            count_down_task = self.count_down_to_remind(task_id, due_time)
+            if count_down_task is not None:
+                self.active_timers[task_id] = count_down_task
+
+        return task_id
 
     async def count_down_for_pending_tasks_immediately(self):
         """
@@ -44,7 +72,9 @@ class TaskManagerNew:
             ):
                 self.active_timers[task_id] = count_down_task
 
-    def count_down_to_remind(self, task_id: int, due_time: float) -> asyncio.Task | None:
+    def count_down_to_remind(
+        self, task_id: int, due_time: float
+    ) -> asyncio.Task | None:
         """
         检查倒计时时长。若为正，则启动新协程进行倒计时，并返回该协程；否则返回None
         """

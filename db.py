@@ -1,10 +1,10 @@
 import sqlite3 as s3
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, TypedDict
 
 from astrbot.api import logger
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel
 
 
 class Task(BaseModel):
@@ -30,6 +30,12 @@ class Task(BaseModel):
         frdly_status = "✅" if self.completed else "⏰"
         frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
         return "{} [{}] {}".format(frdly_status, frdly_due_time, self.content)
+
+
+class EditTaskPayload(TypedDict):
+    task_id: int
+    content: str
+    due_time: int
 
 
 class TaskDB:
@@ -155,6 +161,18 @@ class TaskDB:
                 "update Tasks set completed = 1 where task_id = ?",
                 (task_id,),
             )
+
+    def update_task(self, task_id: int, content: str, due_time: int) -> bool:
+        """
+        更新任务的内容和到期时间
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "update Tasks set content = ?, due_time = ? where task_id = ?",
+                (content, due_time, task_id),
+            )
+            return cursor.rowcount > 0
 
     def delete_task(self, task_id: int):
         """

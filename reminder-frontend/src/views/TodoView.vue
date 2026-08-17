@@ -2,15 +2,18 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
-import type { Task } from '@/types.ts'
-import { checkIfAlreadyLoggedIn, logout, getTasks, delTaskById } from '@/fbApi/apis.ts'
-import { NButton, NButtonGroup, NIcon } from "naive-ui"
+import type { EditTaskPayload, Task } from '@/types.ts'
+import { checkIfAlreadyLoggedIn, logout, getTasks, delTaskById, updateTaskById } from '@/fbApi/apis.ts'
+import EditTaskModal from '@/components/EditTaskModal.vue'
+import { NButton, NButtonGroup, NIcon, useMessage } from "naive-ui"
 import { DocumentEdit20Regular, Delete20Regular } from "@vicons/fluent";
 
 const router = useRouter()
+const message = useMessage();
 
-// TODO: 后续替换为 GET /api/tasks 的真实数据
 const tasks = ref<Task[]>([])
+const showEditModal = ref(false)
+const editingTask = ref<Task | null>(null)
 
 async function handleLogout() {
   logout().then(() => {
@@ -39,6 +42,34 @@ async function handleRemoveTask(taskId: number) {
         break;
       default:
         break;
+    }
+  });
+}
+
+function openEditModal(task: Task) {
+  editingTask.value = task
+  showEditModal.value = true
+}
+
+function closeEditModal() {
+  showEditModal.value = false
+  editingTask.value = null
+}
+
+/**
+ * 将需要更新的任务的信息发回后端去更新，然后关闭Modal
+ * @param payload 要更新的任务的具体信息
+ */
+async function handleEditSaved(payload: EditTaskPayload) {
+  updateTaskById(payload.task_id, {
+    content: payload.content,
+    due_time: payload.due_time,
+  }).then(res => {
+    if (res.code === 200) {
+      closeEditModal()
+      refreshTasks()
+    } else {
+      message.error(`Update failed with code ${res.code}: \n${res.payload}`)
     }
   });
 }
@@ -92,7 +123,7 @@ onMounted(async () => {
 
                 <n-button-group>
                   <!-- 编辑按钮和删除按钮 -->
-                  <n-button size="tiny" secondary ghost type="primary" :bordered="false">
+                  <n-button size="tiny" secondary ghost type="primary" :bordered="false" @click="openEditModal(task)">
                     <n-icon>
                       <DocumentEdit20Regular />
                     </n-icon>
@@ -110,6 +141,8 @@ onMounted(async () => {
         </n-list-item>
       </n-list>
     </n-card>
+
+    <EditTaskModal :show="showEditModal" :task="editingTask" @close="closeEditModal" @save="handleEditSaved" />
   </div>
 </template>
 

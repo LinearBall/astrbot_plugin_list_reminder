@@ -7,7 +7,7 @@ from astrbot.api import logger
 from hypercorn.config import Config
 from quart import Quart, jsonify, redirect, render_template, request, session, url_for
 
-from .db import Task
+from .db import Task, EditTaskPayload
 import pydantic
 from .shared_types import LoginPayload
 from .task_manager_new import TaskManagerNew
@@ -228,6 +228,32 @@ async def delete_task(task_id):
     if timer and not timer.done():
         timer.cancel()
     return api_success(message="任务已删除")
+
+
+@APP.route("/api/tasks/<int:task_id>", methods=["PUT"])
+async def update_task(task_id):
+    tm = TASK_MANAGER
+    if tm is None:
+        return api_error(503, "任务管理器不可用")
+    sender_id = current_session_sender_id()
+    if not sender_id:
+        return api_error(401, "未登录")
+
+    task = tm.db.get_task_by_id(task_id)
+    if not task or task.creator != sender_id:
+        return api_error(404, "任务未找到或无权限")
+
+    data: EditTaskPayload = await request.get_json(silent=True)
+    content = data["content"]
+    due_time = data["due_time"]
+    if not content or not due_time:
+        return api_error(400, "内容、到期时间不能为空")
+
+    updated_task_id = tm.update_task(task_id, content, due_time)
+    if updated_task_id == -1:
+        return api_error(500, "更新失败：任务不存在")
+
+    return api_success(message="任务已更新", task_id=updated_task_id)
 
 
 # --- Server lifecycle ---

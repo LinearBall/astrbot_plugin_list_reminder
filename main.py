@@ -131,7 +131,7 @@ class ListReminderPlugin(Star):
             creator=sender_id,
             umo=umo,
             content=task_info["content"],
-            due_time=due_timestamp.timestamp(),
+            due_time=due_timestamp.timestamp(),  # 单位为second
         )
 
         if task_id:

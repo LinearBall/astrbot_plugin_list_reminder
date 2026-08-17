@@ -1,4 +1,4 @@
-import type { ApiResp, Task } from "@/types.ts";
+import type { ApiResp, EditTaskPayload, Task } from "@/types.ts";
 import axios from "axios";
 
 /**
@@ -56,4 +56,10 @@ async function delTaskById(taskId: number) {
     return data;
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById }
+async function updateTaskById(taskId: number, payload: Pick<EditTaskPayload, "content" | "due_time">) {
+    let resp = await http.put<ApiResp>(`/api/tasks/${taskId}`, payload);
+    let data = resp.data as ApiResp;
+    return data;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById, updateTaskById }
