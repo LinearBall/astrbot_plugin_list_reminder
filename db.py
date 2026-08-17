@@ -1,8 +1,7 @@
 import sqlite3 as s3
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 from astrbot.api import logger
 from pydantic import BaseModel, field_serializer
@@ -106,6 +105,46 @@ class TaskDB:
             return None
         return Task.from_db_row(row)
 
+    def get_tasks_by_umo(self, umo: str) -> List[Task]:
+        """
+        获取指定聊天窗口内布置的所有任务
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select * from Tasks where umo = ?",
+                (umo,),
+            )
+        rows: List[s3.Row] = cursor.fetchall()
+        for row in rows:
+            logger.info(row)
+        return [Task.from_db_row(row) for row in rows]
+
+    def get_tasks_by_creator(self, creator: str) -> List[Task]:
+        """
+        获取指定用户创建的所有任务
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select * from Tasks where creator = ?",
+                (creator,),
+            )
+        rows: List[s3.Row] = cursor.fetchall()
+        return [Task.from_db_row(row) for row in rows]
+
+    def get_pending_task_ids_with_due_time(self):
+        """
+        获取所有未完成的任务ID和到期时间
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select task_id, due_time from Tasks where completed = 0",
+            )
+        rows: List[s3.Row] = cursor.fetchall()
+        return [(row[0], row[1]) for row in rows]
+
     def mark_task_as_completed(self, task_id: int):
         """
         标记任务为已完成
@@ -146,43 +185,3 @@ class TaskDB:
                 "delete from Tasks where creator = ?",
                 (sender_id,),
             )
-
-    def get_tasks_by_umo(self, umo: str) -> List[Task]:
-        """
-        获取指定聊天窗口内布置的所有任务
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "select * from Tasks where umo = ?",
-                (umo,),
-            )
-        rows: List[s3.Row] = cursor.fetchall()
-        for row in rows:
-            logger.info(row)
-        return [Task.from_db_row(row) for row in rows]
-
-    def get_tasks_by_creator(self, creator: str) -> List[Task]:
-        """
-        获取指定用户创建的所有任务
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "select * from Tasks where creator = ?",
-                (creator,),
-            )
-        rows: List[s3.Row] = cursor.fetchall()
-        return [Task.from_db_row(row) for row in rows]
-
-    def get_pending_task_ids_with_due_time(self):
-        """
-        获取所有未完成的任务ID和到期时间
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "select task_id, due_time from Tasks where completed = 0",
-            )
-        rows: List[s3.Row] = cursor.fetchall()
-        return [(row[0], row[1]) for row in rows]

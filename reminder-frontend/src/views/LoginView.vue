@@ -10,6 +10,9 @@ const message = useMessage()
 const key = ref("")
 const loading = ref(false) // * 登录按钮用
 
+/**
+ * 处理登录事件。若登录成功，则路由到任务页
+ */
 async function handleLogin() {
   // 首先确认密钥非空
   if (!key.value.trim()) {
@@ -22,7 +25,7 @@ async function handleLogin() {
     loading.value = false
     if (val) {
       message.success("登录成功");
-      router.push("/")  // * 通过这个实现跳转
+      router.push("/todo")  // * 通过这个实现跳转
     } else {
       message.error("密钥错误");
     }
@@ -30,11 +33,10 @@ async function handleLogin() {
 }
 
 onMounted(async () => {
-  // 检查是否已登录
+  // 检查是否已登录，若是，则直接跳转到任务页
   let isAlready = await checkIfAlreadyLoggedIn();
   if (isAlready !== null) {
-    loading.value = false
-    router.push("/")  // * 通过这个实现跳转
+    router.push("/todo")  // * 通过这个实现跳转
   }
 });
 </script>

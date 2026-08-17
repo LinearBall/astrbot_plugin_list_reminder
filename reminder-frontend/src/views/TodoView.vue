@@ -1,45 +1,43 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 import type { Task } from '@/types.ts'
-import { logout } from '@/fbApi/apis.ts'
+import { checkIfAlreadyLoggedIn, logout, getTasks } from '@/fbApi/apis.ts'
 
 const router = useRouter()
 
 // TODO: 后续替换为 GET /api/tasks 的真实数据
-const tasks = ref<Task[]>([
-  {
-    task_id: 1,
-    creator: 'userA',
-    umo: 'u1',
-    content: '准备明天下午三点的项目会议材料',
-    due_time: '2026-08-17T15:00:00',
-    completed: false,
-  },
-  {
-    task_id: 2,
-    creator: 'userA',
-    umo: 'u1',
-    content: '提交周报',
-    due_time: '2026-08-18T10:00:00',
-    completed: true,
-  },
-  {
-    task_id: 3,
-    creator: 'userA',
-    umo: 'u1',
-    content: '给数据库备份文件做一次异地备份',
-    due_time: '2026-08-20T09:30:00',
-    completed: false,
-  },
-])
+const tasks = ref<Task[]>([])
 
 async function handleLogout() {
   logout().then(() => {
     router.push('/login')
   });
 }
+
+function refreshTasks() {
+  getTasks().then(newTasks => {
+    tasks.value = newTasks;
+  })
+}
+
+function toLocalISOString(timestamp: number) {
+  const date = new Date(timestamp > 1e11 ? timestamp : timestamp * 1000);
+  // 减去时区偏差
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  // 截取前 19 位：YYYY-MM-DDTHH:mm:ss
+  return localDate.toISOString().slice(0, 19);
+}
+
+onMounted(async () => {
+  // 检查是否已登录，若否，则跳转到登录页
+  let isAlready = await checkIfAlreadyLoggedIn();
+  if (isAlready === null) {
+    router.push("/login");  // * 通过这个实现跳转
+  }
+  refreshTasks();
+});
 </script>
 
 <template>
@@ -51,7 +49,8 @@ async function handleLogout() {
             <span class="todo-title">我的待办事项</span>
             <span class="todo-count">{{ tasks.length }} 项任务</span>
           </div>
-          <n-button quaternary @click="handleLogout">退出登录</n-button>
+          <n-button @click="refreshTasks">刷新任务列表</n-button>
+          <n-button @click="handleLogout">退出登录</n-button>
         </div>
       </template>
 
@@ -66,7 +65,8 @@ async function handleLogout() {
                 {{ task.content }}
               </div>
               <div class="task-meta">
-                <n-text depth="3">{{ task.due_time }}</n-text>
+                <!-- <n-text depth="3">{{ task.due_time }}</n-text> -->
+                <n-text depth="3">{{ toLocalISOString(task.due_time) }}</n-text>
                 <n-text :type="task.completed ? 'success' : 'info'">
                   {{ task.completed ? '已完成' : '待提醒' }}
                 </n-text>

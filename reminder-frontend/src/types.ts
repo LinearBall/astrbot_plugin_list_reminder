@@ -3,7 +3,7 @@ export interface Task {
     creator: string
     umo: string
     content: string
-    due_time: string
+    due_time: number
     completed: boolean
 }
 

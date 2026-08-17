@@ -7,7 +7,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: '/',
+      path: '/todo',
       name: 'todos',
       component: TodoView,
     },
@@ -19,7 +19,7 @@ const router = createRouter({
     {
       // 未知路径统一回到待办列表
       path: '/:pathMatch(.*)*',
-      redirect: '/',
+      redirect: '/login',
     },
   ],
 })
