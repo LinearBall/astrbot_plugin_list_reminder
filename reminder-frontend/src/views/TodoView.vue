@@ -3,7 +3,9 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 import type { Task } from '@/types.ts'
-import { checkIfAlreadyLoggedIn, logout, getTasks } from '@/fbApi/apis.ts'
+import { checkIfAlreadyLoggedIn, logout, getTasks, delTaskById } from '@/fbApi/apis.ts'
+import { NButton, NButtonGroup, NIcon } from "naive-ui"
+import { DocumentEdit20Regular, Delete20Regular } from "@vicons/fluent";
 
 const router = useRouter()
 
@@ -25,9 +27,20 @@ function refreshTasks() {
 function toLocalISOString(timestamp: number) {
   const date = new Date(timestamp > 1e11 ? timestamp : timestamp * 1000);
   // 减去时区偏差
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
   // 截取前 19 位：YYYY-MM-DDTHH:mm:ss
   return localDate.toISOString().slice(0, 19);
+}
+
+async function handleRemoveTask(taskId: number) {
+  delTaskById(taskId).then(res => {
+    switch (res.code) {
+      case 200:
+        break;
+      default:
+        break;
+    }
+  });
 }
 
 onMounted(async () => {
@@ -41,16 +54,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="todo-page">
-    <n-card class="todo-card">
+  <div class="container">
+    <n-card class="todo-card shadow-edge">
       <template #header>
         <div class="todo-header">
           <div>
             <span class="todo-title">我的待办事项</span>
             <span class="todo-count">{{ tasks.length }} 项任务</span>
           </div>
-          <n-button @click="refreshTasks">刷新任务列表</n-button>
-          <n-button @click="handleLogout">退出登录</n-button>
+          <n-button-group>
+            <n-button secondary type="primary" @click="refreshTasks">刷新列表</n-button>
+            <n-button secondary type="error" @click="handleLogout">退出登录</n-button>
+          </n-button-group>
         </div>
       </template>
 
@@ -58,18 +73,37 @@ onMounted(async () => {
 
       <n-list v-else>
         <n-list-item v-for="task in tasks" :key="task.task_id">
+          <hr />
           <div class="task-item">
             <n-checkbox v-model:checked="task.completed" />
             <div class="task-content">
-              <div class="task-content__text" :class="{ 'is-completed': task.completed }">
+              <!-- 任务具体内容的文本 -->
+              <div class="task-content-text" :class="{ 'is-completed': task.completed }">
                 {{ task.content }}
               </div>
               <div class="task-meta">
-                <!-- <n-text depth="3">{{ task.due_time }}</n-text> -->
+                <!-- 到期时间 -->
                 <n-text depth="3">{{ toLocalISOString(task.due_time) }}</n-text>
+
+                <!-- 完成情况 -->
                 <n-text :type="task.completed ? 'success' : 'info'">
                   {{ task.completed ? '已完成' : '待提醒' }}
                 </n-text>
+
+                <n-button-group>
+                  <!-- 编辑按钮和删除按钮 -->
+                  <n-button size="tiny" secondary ghost type="primary" :bordered="false">
+                    <n-icon>
+                      <DocumentEdit20Regular />
+                    </n-icon>
+                  </n-button>
+                  <n-button size="tiny" secondary ghost type="error" :bordered="false"
+                    @click="handleRemoveTask(task.task_id)">
+                    <n-icon>
+                      <Delete20Regular />
+                    </n-icon>
+                  </n-button>
+                </n-button-group>
               </div>
             </div>
           </div>
@@ -80,19 +114,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.todo-page {
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  padding: 24px 16px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%);
-}
-
 .todo-card {
   width: 100%;
-  max-width: 720px;
+  max-width: 70vw;
   align-self: flex-start;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
 }
 
 .todo-header {
@@ -125,13 +150,13 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.task-content__text {
+.task-content-text {
   font-size: 15px;
   line-height: 1.5;
   word-break: break-word;
 }
 
-.task-content__text.is-completed {
+.task-content-text.is-completed {
   text-decoration: line-through;
   color: #8a919f;
 }

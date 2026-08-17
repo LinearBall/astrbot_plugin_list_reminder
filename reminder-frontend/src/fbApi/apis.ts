@@ -50,4 +50,10 @@ async function getTasks(): Promise<Task[]> {
     return data.code === 200 ? data["payload"]["tasks"] as Task[] : [];
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks }
+async function delTaskById(taskId: number) {
+    let resp = await http.delete(`/api/tasks/${taskId}`);
+    let data = resp.data as ApiResp;
+    return data;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById }
