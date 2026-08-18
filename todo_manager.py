@@ -34,14 +34,34 @@ class TodoManager:
         content: str,
         due_time: float,
         completed: bool = False,
+        tags: List[str] | None = None,
     ) -> int:
         """
         创建一个新任务，并开始倒计时。若创建失败，则返回-1
+
+        Args:
+            creator: 任务创建者 sender_id。
+            umo: 所在会话的 umo。
+            content: 任务内容。
+            due_time: 到期时间戳。
+            completed: 是否已完成。
+            tags: 任务标签，可为空。
         """
         if get_delay(due_time) < 0:
             return -1
 
         new_todo_id = self.db.add_todo(creator, umo, content, due_time, completed)
+        # 去空、去重（不区分大小写）后附加标签
+        seen = set()
+        for item in tags or []:
+            if not isinstance(item, str):
+                continue
+            tag = item.strip()
+            key = tag.casefold()
+            if not tag or key in seen:
+                continue
+            seen.add(key)
+            self.tag_db.attach_tag_to_todo(new_todo_id, tag)
         self.active_timers[new_todo_id] = self.count_down_to_remind(
             new_todo_id, due_time
         )
@@ -109,7 +129,10 @@ class TodoManager:
         await asyncio.sleep(delay)
         todo = self.db.get_todo_by_id(todo_id)
         assert todo is not None
-        remind_msg = MessageChain().message(todo.content)
+        remind_text = todo.content
+        if todo.tags:
+            remind_text += "  #" + " #".join(todo.tags)
+        remind_msg = MessageChain().message(remind_text)
         await self.context.send_message(todo.umo, remind_msg)
         self.db.mark_todo_as_completed(todo_id)
         del self.active_timers[todo_id]

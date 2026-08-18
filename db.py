@@ -24,6 +24,7 @@ class Todo(BaseModel):
     content: str
     due_time: int
     completed: bool
+    tags: List[str] = []
 
     @staticmethod
     def from_db_row(row: s3.Row) -> "Todo":
@@ -39,7 +40,8 @@ class Todo(BaseModel):
     def to_friendly(self) -> str:
         frdly_status = "✅" if self.completed else "⏰"
         frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
-        return "{} [{}] {}".format(frdly_status, frdly_due_time, self.content)
+        tag_hint = (" #" + " #".join(self.tags)) if self.tags else ""
+        return "{} [{}] {}{}".format(frdly_status, frdly_due_time, self.content, tag_hint)
 
 
 class EditTodoPayload(TypedDict):
@@ -168,7 +170,28 @@ class TodoDB:
         if row is None:
             logger.error("待办 {} 不存在".format(todo_id))
             return None
-        return Todo.from_db_row(row)
+        todo = Todo.from_db_row(row)
+        todo.tags = self.get_tags_by_todo(todo_id)
+        return todo
+
+    def get_tags_by_todo(self, todo_id: int) -> List[str]:
+        """按待办 ID 查询其全部标签。
+
+        Args:
+            todo_id: 待办 ID。
+
+        Returns:
+            标签名列表。
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT t.name FROM Tags t
+                JOIN TodoTags tt ON tt.tag_id = t.tag_id
+                WHERE tt.todo_id = ?""",
+                (todo_id,),
+            )
+        return [row[0] for row in cursor.fetchall()]
 
     def get_todo_by_umo(self, umo: str) -> List[Todo]:
         """
@@ -196,7 +219,10 @@ class TodoDB:
                 (creator,),
             )
         rows: List[s3.Row] = cursor.fetchall()
-        return [Todo.from_db_row(row) for row in rows]
+        todos = [Todo.from_db_row(row) for row in rows]
+        for todo in todos:
+            todo.tags = self.get_tags_by_todo(todo.todo_id)
+        return todos
 
     def get_pending_todo_ids_with_due_time(self):
         """

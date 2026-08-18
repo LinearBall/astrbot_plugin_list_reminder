@@ -69,7 +69,7 @@ class ListReminderPlugin(Star):
     async def close_webui(self, event: AstrMessageEvent):
         """关闭后台管理界面"""
         if self.webui_task and not self.webui_task.done():
-            # 请求优雅关闭，并等待服务真正退出（端口释放）再提示
+            # 请求关闭，并等待服务真正退出（端口释放）再提示
             self.server.request_shutdown()
             try:
                 await self.webui_task
@@ -164,6 +164,7 @@ class ListReminderPlugin(Star):
             umo=umo,
             content=task_info["content"],
             due_time=due_timestamp.timestamp(),  # 单位为second
+            tags=task_info.get("tags") or [],
         )
 
         if task_id >= 0:
@@ -259,18 +260,19 @@ class ListReminderPlugin(Star):
                 f"你是一个日程解析助手。当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}"
                 f"（{weekday_name}，Asia/Shanghai）。\n\n"
                 "从用户消息中提取提醒任务信息，返回 JSON，格式如下：\n"
-                '{"content": "任务内容简述", "date_str": "2026-07-11T15:00:00"}\n\n'
+                '{"content": "任务内容简述", "date_str": "2026-07-11T15:00:00", "tags": []}\n\n'
                 "规则：\n"
-                "- content：任务内容，简洁明了。\n"
+                "- content：任务内容，简洁明了，不要包含标签。\n"
                 "- date_str：提醒时间，ISO 格式（基于上方当前时间换算）。如果用户没有指定时间，设为空字符串。\n"
+                "- tags：任务自身的标签列表（如「工作」「重要」「生日」）。用户显式用「标签：xxx」「打标签 xxx」等方式指明时提取；没有则返回空数组。\n"
                 "- 如果用户说「明天」、「后天」、「下周一」、「X小时后」等相对时间，基于当前时间计算绝对日期。\n\n"
                 "示例：\n"
                 f"消息：提醒我明天下午3点开会\n"
-                f'{{"content": "开会", "date_str": "{tomorrow.strftime("%Y-%m-%dT15:00:00")}"}}\n\n'
-                f"消息：后天上午10点记得交报告\n"
-                f'{{"content": "交报告", "date_str": "{day_after.strftime("%Y-%m-%dT10:00:00")}"}}\n\n'
-                f"消息：安排下周一早上9点半的团队会议\n"
-                f'{{"content": "团队会议", "date_str": "{next_monday.strftime("%Y-%m-%dT09:30:00")}"}}\n\n'
+                f'{{"content": "开会", "date_str": "{tomorrow.strftime("%Y-%m-%dT15:00:00")}", "tags": []}}\n\n'
+                f"消息：后天上午10点记得交报告，标签：工作\n"
+                f'{{"content": "交报告", "date_str": "{day_after.strftime("%Y-%m-%dT10:00:00")}", "tags": ["工作"]}}\n\n'
+                f"消息：安排下周一早上9点半的团队会议，打标签：重要、会议\n"
+                f'{{"content": "团队会议", "date_str": "{next_monday.strftime("%Y-%m-%dT09:30:00")}", "tags": ["重要", "会议"]}}\n\n'
                 "仅返回 JSON，不要其他内容。"
             )
 
@@ -297,9 +299,10 @@ class ListReminderPlugin(Star):
 
             content = result.get("content", "").strip()
             date_str = result.get("date_str", "").strip()
+            tags = result.get("tags") or []
 
             if not content or not date_str:
-                return {"content": content, "time": ""}
+                return {"content": content, "time": "", "tags": tags}
 
             # 验证并标准化时间
             try:
@@ -317,7 +320,7 @@ class ListReminderPlugin(Star):
                 except (ValueError, TypeError):
                     return {"content": content, "time": ""}
 
-            return {"content": content, "time": task_time}
+            return {"content": content, "time": task_time, "tags": tags}
 
         except Exception as e:
             logger.error(f"提取任务失败: {e}")
