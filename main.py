@@ -159,16 +159,18 @@ class ListReminderPlugin(Star):
 
         # 创建任务
         due_timestamp = datetime.fromisoformat(task_info["time"])
+        task_tags = task_info.get("tags") or []
         task_id = self.todo_manager.create_todo(
             creator=sender_id,
             umo=umo,
             content=task_info["content"],
             due_time=due_timestamp.timestamp(),  # 单位为second
-            tags=task_info.get("tags") or [],
+            tags=task_tags,
         )
 
         if task_id >= 0:
-            yield event.plain_result(f"✅ 任务已创建：{task_info['content']}")
+            tag_hint = (" #" + " #".join(task_tags)) if task_tags else ""
+            yield event.plain_result(f"✅ 任务已创建：{task_info['content']}{tag_hint}")
         else:
             yield event.plain_result("❌ 任务创建失败")
 
