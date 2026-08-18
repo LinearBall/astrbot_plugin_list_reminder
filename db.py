@@ -1,49 +1,92 @@
-import asyncio
 import sqlite3 as s3
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, TypedDict
 
 from astrbot.api import logger
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_data_path,  # 新版插件目录
+)
+from pydantic import BaseModel
 
 
-@dataclass
-class Task:
-    task_id: int
+# 配置
+PLUGIN_DIR = Path(__file__).parent.absolute()
+PLUGIN_NAME = "list_reminder"
+PLUGIN_DATA_ROOT = (Path(get_astrbot_plugin_data_path()) / PLUGIN_NAME).resolve()
+# 确保目录存在
+PLUGIN_DATA_ROOT.mkdir(parents=True, exist_ok=True)
+
+class Todo(BaseModel):
+    todo_id: int
     creator: str
     umo: str
     content: str
     due_time: int
     completed: bool
+    tags: List[str] = []
+
+    @staticmethod
+    def from_db_row(row: s3.Row) -> "Todo":
+        return Todo(
+            todo_id=row[0],
+            creator=row[1],
+            umo=row[2],
+            content=row[3],
+            due_time=row[4],
+            completed=row[5],
+        )
+
+    def to_friendly(self) -> str:
+        frdly_status = "✅" if self.completed else "⏰"
+        frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
+        tag_hint = (" #" + " #".join(self.tags)) if self.tags else ""
+        return "{} [{}] {}{}".format(frdly_status, frdly_due_time, self.content, tag_hint)
 
 
-@dataclass
-class User:
+class EditTodoPayload(TypedDict):
+    todo_id: int
+    content: str
+    due_time: int
+    completed: bool
+
+
+class User(BaseModel):
     sender_id: str
     umo: str
     is_admin: bool
 
+    @staticmethod
+    def from_db_row(row: s3.Row) -> "User":
+        return User(
+            sender_id=row[0],
+            umo=row[1],
+            is_admin=bool(row[2]),
+        )
 
-class TaskDB:
-    """任务数据库：负责任务的增删改查，以及按标签查询/创建/删除任务。
 
-    同时负责初始化整个 tasks.db 的建表；UserDB 与 TagDB 复用其连接。
+class TodoDB:
+    """
+    存储所有待办事项的数据库。
+    * 重要提示: creator由event.get_sender_id()获取
+    * 重要提示: umo 唯一标识一个聊天窗口，可能是私聊或群聊
+
+    同时负责初始化整个 todos.db 的建表；UserDB 与 TagDB 复用其连接。
     """
 
     def __init__(self) -> None:
-        self.db_path = Path(__file__).parent / "tasks.db"
+        self.db_path = PLUGIN_DATA_ROOT
         self.conn = self.ensure_db()
 
     def __del__(self):
         self.conn.close()
 
     def ensure_db(self) -> s3.Connection:
-        conn = s3.connect(self.db_path)
-        # 构造任务表
+        conn = s3.connect(self.db_path / "todos.db")
+        # 构造待办表
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS Tasks (
-                task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            CREATE TABLE IF NOT EXISTS Todos (
+                todo_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 creator TEXT NOT NULL,
                 umo TEXT NOT NULL,
                 content TEXT NOT NULL,
@@ -76,263 +119,268 @@ class TaskDB:
                 FOREIGN KEY (tag_id) REFERENCES Tags(tag_id)
             )
         """)
-        # 任务-标签关联表：一个任务可有多个标签，一个标签可属于多个任务
+        # 待办-标签关联表：一个待办可有多个标签，一个标签可属于多个待办
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS TaskTags (
-                task_id INTEGER NOT NULL,
+            CREATE TABLE IF NOT EXISTS TodoTags (
+                todo_id INTEGER NOT NULL,
                 tag_id INTEGER NOT NULL,
-                PRIMARY KEY (task_id, tag_id),
-                FOREIGN KEY (task_id) REFERENCES Tasks(task_id),
+                PRIMARY KEY (todo_id, tag_id),
+                FOREIGN KEY (todo_id) REFERENCES Todos(todo_id),
                 FOREIGN KEY (tag_id) REFERENCES Tags(tag_id)
             )
         """)
         conn.commit()
         return conn
 
-    def add_task(
+    def add_todo(
         self,
         creator: str,
         umo: str,
         content: str,
         due_time: float,
+        completed: bool = False,
     ) -> int:
-        """将任务添加到数据库中。
-
-        Args:
-            creator: 创建者 sender_id。
-            umo: 添加任务的聊天窗口ID。
-            content: 任务内容。
-            due_time: 到期时间戳。
-
-        Returns:
-            新任务 ID。
+        """
+        将待办添加到数据库中
+        :param umo: 添加待办的聊天窗口ID
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                    insert into Tasks (creator, umo, content, due_time) VALUES (?, ?, ?, ?)
+                    insert into Todos (creator, umo, content, due_time, completed) VALUES (?, ?, ?, ?, ?)
                 """,
-                (creator, umo, content, due_time),
+                (creator, umo, content, due_time, int(completed)),
             )
-            new_task_id = cursor.lastrowid
-        assert new_task_id is not None
-        return new_task_id
+            new_todo_id = cursor.lastrowid
+        assert new_todo_id is not None
+        return new_todo_id
 
-    def get_task_by_id(self, task_id: int) -> Task | None:
-        """获取指定任务ID的任务。
-
-        Args:
-            task_id: 任务 ID。
-
-        Returns:
-            任务信息；不存在时返回 None。
+    def get_todo_by_id(self, todo_id: int) -> Todo | None:
+        """
+        获取指定ID的待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where task_id = ?",
-                (task_id,),
+                "select * from Todos where todo_id = ?",
+                (todo_id,),
             )
         row: s3.Row | None = cursor.fetchone()
         if row is None:
-            logger.error("任务 {} 不存在".format(task_id))
+            logger.error("待办 {} 不存在".format(todo_id))
             return None
-        return Task(*row)
+        todo = Todo.from_db_row(row)
+        todo.tags = self.get_tags_by_todo(todo_id)
+        return todo
 
-    def mark_task_as_completed(self, task_id: int):
-        """标记任务为已完成。
-
-        Args:
-            task_id: 任务 ID。
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "update Tasks set completed = 1 where task_id = ?",
-                (task_id,),
-            )
-
-    def delete_task(self, task_id: int):
-        """删除指定任务。
+    def get_tags_by_todo(self, todo_id: int) -> List[str]:
+        """按待办 ID 查询其全部标签。
 
         Args:
-            task_id: 任务 ID。
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "delete from Tasks where task_id = ?",
-                (task_id,),
-            )
-
-    def clear_tasks_by_umo(self, umo: str):
-        """清空指定聊天窗口内的所有任务。
-
-        Args:
-            umo: 聊天窗口ID。
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "delete from Tasks where umo = ?",
-                (umo,),
-            )
-
-    def clear_tasks_by_sender_id(self, sender_id: str):
-        """删除指定用户创建的所有任务。
-
-        Args:
-            sender_id: 用户唯一标识。
-        """
-        with self.conn as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "delete from Tasks where creator = ?",
-                (sender_id,),
-            )
-
-    def get_tasks_by_umo(self, umo: str) -> List[Task]:
-        """获取指定聊天窗口内布置的所有任务。
-
-        Args:
-            umo: 聊天窗口ID。
+            todo_id: 待办 ID。
 
         Returns:
-            任务列表。
+            标签名列表。
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where umo = ?",
+                """SELECT t.name FROM Tags t
+                JOIN TodoTags tt ON tt.tag_id = t.tag_id
+                WHERE tt.todo_id = ?""",
+                (todo_id,),
+            )
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_todo_by_umo(self, umo: str) -> List[Todo]:
+        """
+        获取指定聊天窗口内布置的所有待办
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "select * from Todos where umo = ?",
                 (umo,),
             )
         rows: List[s3.Row] = cursor.fetchall()
         for row in rows:
             logger.info(row)
-        return [Task(*row) for row in rows]
+        return [Todo.from_db_row(row) for row in rows]
 
-    def get_tasks_by_creator(self, creator: str) -> List[Task]:
-        """获取指定用户创建的所有任务。
-
-        Args:
-            creator: 用户 sender_id。
-
-        Returns:
-            任务列表。
+    def get_todo_by_creator(self, creator: str) -> List[Todo]:
+        """
+        获取指定用户创建的所有待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where creator = ?",
+                "select * from Todos where creator = ?",
                 (creator,),
             )
         rows: List[s3.Row] = cursor.fetchall()
-        return [Task(*row) for row in rows]
+        todos = [Todo.from_db_row(row) for row in rows]
+        for todo in todos:
+            todo.tags = self.get_tags_by_todo(todo.todo_id)
+        return todos
 
-    def get_pending_task_ids_with_due_time(self):
-        """获取所有未完成的任务ID和到期时间。
-
-        Returns:
-            (task_id, due_time) 元组列表。
+    def get_pending_todo_ids_with_due_time(self):
+        """
+        获取所有未完成的待办ID和到期时间
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select task_id, due_time from Tasks where completed = 0",
+                "select todo_id, due_time from Todos where completed = 0",
             )
         rows: List[s3.Row] = cursor.fetchall()
         return [(row[0], row[1]) for row in rows]
 
-    def get_tasks_by_tag(self, tag: str) -> List[Task]:
-        """根据标签批量查询任务。
+    def mark_todo_as_completed(self, todo_id: int):
+        """
+        标记待办为已完成
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "update Todos set completed = 1 where todo_id = ?",
+                (todo_id,),
+            )
+
+    def update_todo(
+        self, todo_id: int, content: str, due_time: int, completed: bool
+    ) -> bool:
+        """
+        更新待办的内容和到期时间
+        :return: 是否有更新某一行
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "update Todos set content = ?, due_time = ?, completed = ? where todo_id = ?",
+                (content, due_time, int(completed), todo_id),
+            )
+            return cursor.rowcount > 0
+
+    def delete_todo(self, todo_id: int):
+        """
+        删除指定待办
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "delete from Todos where todo_id = ?",
+                (todo_id,),
+            )
+
+    def clear_todos_by_umo(self, umo: str):
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "delete from Todos where umo = ?",
+                (umo,),
+            )
+
+    def clear_todos_by_sender_id(self, sender_id: str):
+        """
+        删除指定用户创建的所有待办
+        """
+        with self.conn as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "delete from Todos where creator = ?",
+                (sender_id,),
+            )
+
+    def get_todos_by_tag(self, tag: str) -> List[Todo]:
+        """根据标签批量查询待办。
 
         Args:
             tag: 标签名称。
 
         Returns:
-            带有该标签的任务列表。
+            带有该标签的待办列表。
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT t.task_id, t.creator, t.umo, t.content, t.due_time, t.completed
-                FROM Tasks t
-                JOIN TaskTags tt ON tt.task_id = t.task_id
+                SELECT t.todo_id, t.creator, t.umo, t.content, t.due_time, t.completed
+                FROM Todos t
+                JOIN TodoTags tt ON tt.todo_id = t.todo_id
                 JOIN Tags g ON g.tag_id = tt.tag_id
                 WHERE g.name = ?
                 """,
                 (tag,),
             )
             rows = cursor.fetchall()
-        return [Task(*row) for row in rows]
+        return [Todo.from_db_row(row) for row in rows]
 
-    def create_tasks_for_tag_users(
+    def create_todos_for_tag_users(
         self,
         tag: str,
         content: str,
         due_time: float,
         user_db: "UserDB",
         tag_db: "TagDB",
-    ) -> List[Task]:
-        """给所有带有指定标签的用户批量创建任务。
+    ) -> List[Todo]:
+        """给所有带有指定标签的用户批量创建待办。
 
         Args:
             tag: 标签名称。
-            content: 任务内容。
+            content: 待办内容。
             due_time: 到期时间戳。
             user_db: 用户数据库实例，用于按标签查找用户。
-            tag_db: 标签数据库实例，用于给新任务打标签。
+            tag_db: 标签数据库实例，用于给新待办打标签。
 
         Returns:
-            创建出的任务列表。
+            创建出的待办列表。
         """
         created = []
         for user in user_db.get_users_by_tag(tag):
-            task_id = self.add_task(user.sender_id, user.umo, content, due_time)
-            tag_db.attach_tag_to_task(task_id, tag)
-            task = self.get_task_by_id(task_id)
-            assert task is not None
-            created.append(task)
+            todo_id = self.add_todo(user.sender_id, user.umo, content, due_time)
+            tag_db.attach_tag_to_todo(todo_id, tag)
+            todo = self.get_todo_by_id(todo_id)
+            assert todo is not None
+            created.append(todo)
         return created
 
-    def delete_tasks_by_task_tag(self, tag: str) -> int:
-        """根据任务标签批量删除任务。
+    def delete_todos_by_todo_tag(self, tag: str) -> int:
+        """根据待办标签批量删除待办。
 
         Args:
             tag: 标签名称。
 
         Returns:
-            删除的任务数量。
+            删除的待办数量。
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT tt.task_id FROM TaskTags tt
+                SELECT tt.todo_id FROM TodoTags tt
                 JOIN Tags t ON t.tag_id = tt.tag_id
                 WHERE t.name = ?
                 """,
                 (tag,),
             )
-            task_ids = [row[0] for row in cursor.fetchall()]
-            if not task_ids:
+            todo_ids = [row[0] for row in cursor.fetchall()]
+            if not todo_ids:
                 return 0
-            placeholders = ",".join("?" * len(task_ids))
+            placeholders = ",".join("?" * len(todo_ids))
             cursor.execute(
-                f"DELETE FROM TaskTags WHERE task_id IN ({placeholders})", task_ids
+                f"DELETE FROM TodoTags WHERE todo_id IN ({placeholders})", todo_ids
             )
             cursor.execute(
-                f"DELETE FROM Tasks WHERE task_id IN ({placeholders})", task_ids
+                f"DELETE FROM Todos WHERE todo_id IN ({placeholders})", todo_ids
             )
-        return len(task_ids)
+        return len(todo_ids)
 
 
 class UserDB:
-    """用户数据库：管理与查询用户及其标签。复用 TaskDB 的连接。"""
+    """用户数据库：管理与查询用户及其标签。复用 TodoDB 的连接。"""
 
-    def __init__(self, db: TaskDB) -> None:
+    def __init__(self, db: "TodoDB") -> None:
         self.conn = db.conn
 
     def add_or_update_user(self, sender_id: str, umo: str, is_admin: bool = False) -> None:
@@ -370,7 +418,7 @@ class UserDB:
             ).fetchone()
         if row is None:
             return None
-        return User(row[0], row[1], bool(row[2]))
+        return User.from_db_row(row)
 
     def get_users_by_tag(self, tag: str) -> List[User]:
         """根据标签批量查询用户。
@@ -394,13 +442,13 @@ class UserDB:
                 (tag,),
             )
             rows = cursor.fetchall()
-        return [User(row[0], row[1], bool(row[2])) for row in rows]
+        return [User.from_db_row(row) for row in rows]
 
 
 class TagDB:
-    """标签数据库：管理标签及标签与用户/任务的关联。复用 TaskDB 的连接。"""
+    """标签数据库：管理标签及标签与用户/待办的关联。复用 TodoDB 的连接。"""
 
-    def __init__(self, db: TaskDB) -> None:
+    def __init__(self, db: "TodoDB") -> None:
         self.conn = db.conn
 
     def get_or_create_tag(self, name: str) -> int:
@@ -439,16 +487,16 @@ class TagDB:
                 (sender_id, tag_id),
             )
 
-    def attach_tag_to_task(self, task_id: int, tag: str) -> None:
-        """给任务附加一个标签。
+    def attach_tag_to_todo(self, todo_id: int, tag: str) -> None:
+        """给待办附加一个标签。
 
         Args:
-            task_id: 任务 ID。
+            todo_id: 待办 ID。
             tag: 标签名称。
         """
         tag_id = self.get_or_create_tag(tag)
         with self.conn as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO TaskTags (task_id, tag_id) VALUES (?, ?)",
-                (task_id, tag_id),
+                "INSERT OR IGNORE INTO TodoTags (todo_id, tag_id) VALUES (?, ?)",
+                (todo_id, tag_id),
             )

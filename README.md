@@ -1,22 +1,132 @@
-# astrbot-plugin-list-reminder
+# 📝 AstrBot 列表提醒插件
 
-AstrBot 备忘录插件，由helloworld插件模板修改而来
+<div align="center">
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen)](https://github.com/LinearBall/astrbot_plugin_list_reminder/pulls)
+[![Version](https://img.shields.io/badge/Version-v2.1-blue)](https://github.com/LinearBall/astrbot_plugin_list_reminder/releases)
 
-## Supports
+</div>
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+## 📑 目录
 
-## 设计文档
+- [📝 AstrBot 列表提醒插件](#-astrbot-列表提醒插件)
+  - [📑 目录](#-目录)
+  - [🚀 功能特点](#-功能特点)
+  - [📦 安装方法](#-安装方法)
+  - [🛠️ 第一次使用](#️-第一次使用)
+  - [⚙️ 配置说明](#️-配置说明)
+  - [📝 使用指令](#-使用指令)
+  - [🖥️ WebUI 管理界面](#️-webui-管理界面)
+  - [📂 数据存储](#-数据存储)
+  - [⚠️ 注意事项](#️-注意事项)
+  - [🆕 最新版本改动（v2.1）](#-最新版本改动v21)
+  - [🛠️ 问题反馈](#️-问题反馈)
+  - [📄 许可证](#-许可证)
 
-### 用户交互设计
+一个基于 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的智能列表式任务管理插件，支持 🤖 AI 对话创建任务、⏰ 定时提醒、🖥️ WebUI 管理界面等特性，适用于个人私聊与群组协作场景。
 
-用户通过注册在各个聊天软件中的机器人账号与Astrbot交互。
+## 🚀 功能特点
 
-### 数据库设计
+| 功能                    | 描述                                                                     |
+| ----------------------- | ------------------------------------------------------------------------ |
+| 🤖 AI 智能识别          | 自动判断对话是否为设置提醒的意图，符合条件时自动创建任务                 |
+| 🧠 自然语言时间解析      | 支持「明天」「后天」「下周一」「X小时后」等相对时间，自动换算为绝对时间 |
+| ⏰ 定时提醒             | 到达设定时间后自动在对应聊天窗口发送提醒消息                             |
+| 📋 任务管理命令         | 通过命令快捷查看任务列表、清空任务                                       |
+| 🏷️ 任务标签             | 创建任务时可附带标签，列表、即时回复与提醒消息中都会显示标签             |
+| 🖥️ WebUI 管理界面       | 独立的后台管理界面，可查看、创建和删除自己的任务                         |
+| 🔐 个人登录密钥         | 每位用户独享登录密钥，登录后只能查看和管理自己的任务                     |
+| 👥 支持用户与群组任务    | 私聊与群聊均可创建和接收提醒                                             |
+| 💾 本地数据库存储       | 任务持久化到本地 SQLite，插件重启后提醒不会丢失                          |
+
+## 📦 安装方法
+
+1. 确保已安装并正常运行 AstrBot
+2. 将插件复制到 AstrBot 的插件目录（也可使用 AstrBot 的插件管理器安装，或下载本项目压缩包上传）
+3. 重启 AstrBot，或使用热加载命令加载插件
+
+## 🛠️ 第一次使用
+
+1. **确认 LLM 配置**：在插件设置中确认 `llm_provider`，AI 识别与时间解析依赖 LLM。
+2. **直接对话创建任务**：向机器人发送类似「提醒我明天下午3点开会」的消息，插件会自动识别并创建任务。
+3. **查看任务**：发送 `/列表提醒 列表` 查看当前所有任务。
+4. **使用 WebUI**：发送 `/列表提醒 后台` 开启后台管理界面，按返回的地址和登录密钥访问。
+
+## ⚙️ 配置说明
+
+可在 AstrBot 插件设置页中配置以下选项：
+
+| 配置项                  | 默认值     | 说明                                                       |
+| ----------------------- | ---------- | ---------------------------------------------------------- |
+| `schedule_detection_llm`| `default`  | 日程检测专用 LLM 提供商（可选，留空则使用主 LLM）          |
+| `max_tasks_per_user`    | `50`       | 每个用户最多可创建的任务数量                               |
+| `enable_personality`    | `true`     | 是否启用默认的人格化设定                                   |
+| `webui_port`            | `5001`     | 后台管理界面端口号                                         |
+| `webui_public_ip`       | 空         | 手动填写服务器公网 IP，留空则自动探测                       |
+| `admin_sender_ids`      | `[]`       | 管理员 `sender_id` 列表，供后台管理员批量管理使用           |
+| `server_key`            | 空         | WebUI 登录密钥，留空则按需自动生成                          |
+
+## 📝 使用指令
+
+| 指令                                 | 说明                               |
+| ------------------------------------ | ---------------------------------- |
+| 发送「提醒我明天下午3点开会」等消息  | 🤖 AI 自动识别并创建提醒任务       |
+| 发送「周末交报告，标签：工作」等消息 | 🏷️ AI 自动识别任务并提取标签       |
+| `/列表提醒 列表`                     | 📋 列出当前用户所有待办任务        |
+| `/列表提醒 清空`                     | 🗑️ 清空当前用户所有任务           |
+| `/列表提醒 后台`                     | 🖥️ 开启后台管理界面并返回登录密钥 |
+| `/列表提醒 关闭后台`                 | 🔒 关闭后台管理界面并清除登录密钥  |
+
+> 说明：
+>
+> - 创建提醒时必须明确时间，否则会提示「无法识别时间，请明确提醒时间」。
+> - 每个用户只能查看和管理自己创建的任务；在群聊中亦然，互不干扰。
+
+## 🖥️ WebUI 管理界面
+
+发送 `/列表提醒 后台` 后，机器人会返回访问地址（配置了公网 IP 时返回公网地址）与个人登录密钥：
+
+```
+访问地址: http://localhost:{webui_port}/login
+公网地址: http://{公网地址}:{webui_port}/login
+登录密钥: {key}
+```
+
+使用返回的密钥登录后即可进入管理界面。界面展示当前用户的任务列表（按到期时间排序），支持：
+
+- 查看任务内容与提醒时间
+- 创建新的任务
+- 删除已完成或不再需要的任务
+
+登录密钥与用户一一绑定，每位用户只能看到和管理属于自己的任务，不同用户之间数据相互隔离。
+
+后台运行期间，发送 `/列表提醒 关闭后台` 即可关闭服务并清除已下发的登录密钥与用户绑定。
+
+## 📂 数据存储
+
+任务数据存储在插件目录下的 SQLite 数据库 `tasks.db` 中，包含任务、用户与标签等表结构。任务持久化保存，AstrBot 重启后会自动为所有未到期任务恢复定时器，不会丢失提醒。
+
+## ⚠️ 注意事项
+
+1. AI 创建任务依赖 LLM，请确保配置了可正常使用的 LLM 提供商。
+2. WebUI 后台默认监听 `0.0.0.0:{port}`，暴露在公网时请务必配合防火墙与登录密钥使用。
+3. 通过 WebUI 后台创建任务时，到期时间不可早于当前时间。
+
+## 🆕 最新版本改动（v2.1）
+
+- 🏷️ 新增任务标签功能：AI 创建任务时可自动提取标签，任务列表、即时回复与到期提醒消息中都会显示标签
+- 🔒 新增 `/列表提醒 关闭后台` 命令，可随时关闭 WebUI 后台
+- 🌐 支持配置公网 IP，开启后台时返回公网访问地址
+- 🗄️ 配置项统一迁移到数据库层统一管理
+
+## 🛠️ 问题反馈
+
+如果遇到问题或有功能建议，欢迎在 [GitHub](https://github.com/LinearBall/astrbot_plugin_list_reminder/issues) 提交 Issue。
+
+## 📄 许可证
+
+本项目基于 MIT 许可证开源。
+
