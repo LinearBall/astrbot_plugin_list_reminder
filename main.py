@@ -150,6 +150,9 @@ class ListReminderPlugin(Star):
         Returns:
             True if the message is setting a reminder/task, False otherwise.
         """
+        # 如果是用户指令不执行解析
+        if msg.lstrip().startswith("/"):
+            return False
         try:
             provider_id = self.schedule_detection_provider_id
             if not provider_id:
@@ -206,9 +209,6 @@ class ListReminderPlugin(Star):
             None on error.
         """
         logger.info(msg)
-        if msg.startswith("/"):
-            # 是用户指令，不执行解析
-            return None
         try:
             provider_id = (
                 self.schedule_detection_provider_id
