@@ -17,7 +17,6 @@ from .todo_manager import TodoManager
 
 class ReminderConfig(TypedDict):
     max_tasks_per_user: int
-    llm_provider_id: str
     schedule_detection_llm: str
     webui_port: int
     server_key: str
@@ -33,7 +32,6 @@ class ListReminderPlugin(Star):
         self.todo_manager = TodoManager(self.context)
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
-        self.llm_provider_id = self.config.get("llm_provider_id")
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
         # WebUI
         self.server = WebUIServer(self.todo_manager)
