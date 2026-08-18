@@ -1,4 +1,4 @@
-import type { ApiResp, EditTaskPayload, Task } from "@/types.ts";
+import type { ApiResp, EditTodoPayload, Todo } from "@/types.ts";
 import axios from "axios";
 
 /**
@@ -42,33 +42,29 @@ async function logout(): Promise<void> {
 }
 
 /**
- * 取得当前用户创建的所有任务
+ * 取得当前用户创建的所有待办
  */
-async function getTasks(): Promise<Task[]> {
-    let resp = await http.get<ApiResp>("/api/tasks");
+async function getTodos(): Promise<Todo[]> {
+    let resp = await http.get<ApiResp>("/api/todos");
     let data = resp.data as ApiResp;
-    return data.code === 200 ? data["payload"]["tasks"] as Task[] : [];
+    return data.code === 200 ? data["payload"]["todos"] as Todo[] : [];
 }
 
-async function delTaskById(taskId: number) {
-    let resp = await http.delete(`/api/tasks/${taskId}`);
-    let data = resp.data as ApiResp;
-    return data;
+async function delTodoById(todoId: number) {
+    let resp = await http.delete(`/api/todos/${todoId}`);
+    return resp.data as ApiResp;
 }
 
 /**
- * 更新指定任务的内容和截止时间，若任务Id为-1，则创建新任务
- * @param taskId 任务ID
- * @param payload 要更新的内容和截止时间
- * @returns 更新结果
+ * 更新指定待办的内容和截止时间，若待办Id为-1，则创建新待办
  */
-async function updateTaskById(payload: EditTaskPayload) {
-    let taskId = payload.task_id;
+async function updateTodoById(payload: EditTodoPayload) {
+    let todoId = payload.todo_id;
     return http({
-        method: taskId < 0 ? "POST" : "PUT",
-        url: taskId < 0 ? "/api/tasks" : `/api/tasks/${taskId}`,
+        method: todoId < 0 ? "POST" : "PUT",
+        url: todoId < 0 ? "/api/todos" : `/api/todos/${todoId}`,
         data: payload,
     }).then(res => res.data as ApiResp);
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById, updateTaskById }
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById }

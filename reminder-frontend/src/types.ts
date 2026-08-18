@@ -1,5 +1,5 @@
-export interface Task {
-    task_id: number
+export interface Todo {
+    todo_id: number
     creator: string
     umo: string
     content: string
@@ -7,8 +7,8 @@ export interface Task {
     completed: boolean
 }
 
-export interface EditTaskPayload {
-    task_id: number
+export interface EditTodoPayload {
+    todo_id: number
     content: string
     due_time: number
     completed: boolean

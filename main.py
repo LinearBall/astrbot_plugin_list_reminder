@@ -10,10 +10,9 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from . import webui
+# from . import webui
+from .webui_new import WebUIServer
 from .todo_manager import TodoManager
-
-# from astrbot.core.message.message_event_result import MessageChain
 
 
 class ReminderConfig(TypedDict):
@@ -36,19 +35,17 @@ class ListReminderPlugin(Star):
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.llm_provider_id = self.config.get("llm_provider_id")
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
-
-        # 设置task_manager引用到webui
-        webui.set_task_manager(self.todo_manager)
-
         # WebUI
-        self.webui_task: asyncio.Task | None = None
+        self.server = WebUIServer(self.todo_manager)
         self.webui_port = self.config.get("webui_port", 5001)
-        self.__restart_webui()
+        self.webui_task: asyncio.Task = asyncio.create_task(
+            self.server.start_server(self.webui_port)
+        )
 
     async def initialize(self):
         """插件初始化"""
         logger.info("ListReminderPlugin 正在加载...")
-        await self.todo_manager.count_down_for_pending_tasks_immediately()
+        await self.todo_manager.count_down_for_pending_todos_immediately()
         logger.info("ListReminderPlugin 加载完成")
 
     def __restart_webui(self):
@@ -56,9 +53,7 @@ class ListReminderPlugin(Star):
         if self.webui_task and not self.webui_task.done():
             self.webui_task.cancel()
         logger.info("现有实例已关闭，正在重新启动新实例……")
-        self.webui_task = asyncio.create_task(
-            webui.start_server(self.config, self.todo_manager)
-        )
+        self.webui_task = asyncio.create_task(self.server.start_server(self.webui_port))
         logger.info("新实例已启动")
 
     @filter.command_group("列表提醒")
@@ -78,10 +73,10 @@ class ListReminderPlugin(Star):
         yield event.plain_result("✅ 后台已重启")
 
     @reminder_commands.command("列表")
-    async def list_tasks(self, event: AstrMessageEvent):
+    async def list_todos(self, event: AstrMessageEvent):
         """列出任务"""
         sender_id = event.get_sender_id()
-        tasks = self.todo_manager.get_tasks_by_creator(sender_id)
+        tasks = self.todo_manager.get_todos_by_creator(sender_id)
 
         if not tasks:
             yield event.plain_result("📝 您当前没有待办任务")
@@ -97,7 +92,7 @@ class ListReminderPlugin(Star):
     async def clear_tasks(self, event: AstrMessageEvent):
         """清空所有任务"""
         sender_id = event.get_sender_id()
-        self.todo_manager.clear_tasks_by_sender_id(sender_id)
+        self.todo_manager.clear_todos_by_sender_id(sender_id)
         yield event.plain_result("🗑️ 任务列表已清空")
 
     @reminder_commands.command("后台")
@@ -111,8 +106,8 @@ class ListReminderPlugin(Star):
         # 识别当前用户？
         sender_id = event.get_sender_id()
         # 为当前用户注册新的个人密钥（绑定 sender_id）
-        key = webui.issue_login_key(sender_id)
-        webui.register_umo_to_sender(sender_id, event.unified_msg_origin)
+        key = self.server.issue_login_key(sender_id)
+        self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
         yield event.plain_result(
             f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
@@ -139,7 +134,7 @@ class ListReminderPlugin(Star):
 
         # 创建任务
         due_timestamp = datetime.fromisoformat(task_info["time"])
-        task_id = self.todo_manager.create_task(
+        task_id = self.todo_manager.create_todo(
             creator=sender_id,
             umo=umo,
             content=task_info["content"],

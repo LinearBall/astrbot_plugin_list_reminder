@@ -7,8 +7,8 @@ from astrbot.api import logger
 from pydantic import BaseModel
 
 
-class Task(BaseModel):
-    task_id: int
+class Todo(BaseModel):
+    todo_id: int
     creator: str
     umo: str
     content: str
@@ -16,9 +16,9 @@ class Task(BaseModel):
     completed: bool
 
     @staticmethod
-    def from_db_row(row: s3.Row) -> "Task":
-        return Task(
-            task_id=row[0],
+    def from_db_row(row: s3.Row) -> "Todo":
+        return Todo(
+            todo_id=row[0],
             creator=row[1],
             umo=row[2],
             content=row[3],
@@ -32,22 +32,22 @@ class Task(BaseModel):
         return "{} [{}] {}".format(frdly_status, frdly_due_time, self.content)
 
 
-class EditTaskPayload(TypedDict):
-    task_id: int
+class EditTodoPayload(TypedDict):
+    todo_id: int
     content: str
     due_time: int
     completed: bool
 
 
-class TaskDB:
+class TodoDB:
     """
-    存储所有任务的数据库。
+    存储所有待办事项的数据库。
     * 重要提示: creator由event.get_sender_id()获取
     * 重要提示: umo 唯一标识一个聊天窗口，可能是私聊或群聊
     """
 
     def __init__(self) -> None:
-        self.db_path = Path(__file__).parent / "tasks.db"
+        self.db_path = Path(__file__).parent / "todos.db"
         self.conn = self.ensure_db()
 
     def __del__(self):
@@ -55,10 +55,10 @@ class TaskDB:
 
     def ensure_db(self) -> s3.Connection:
         conn = s3.connect(self.db_path)
-        # 构造任务表
+        # 构造待办表
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS Tasks (
-                task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            CREATE TABLE IF NOT EXISTS Todos (
+                todo_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 creator TEXT NOT NULL,
                 umo TEXT NOT NULL,
                 content TEXT NOT NULL,
@@ -67,13 +67,13 @@ class TaskDB:
             )
         """)
         # 迁移：删除旧版遗留的 group_id 列
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(Tasks)")}
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(Todos)")}
         if "group_id" in columns:
-            conn.execute("ALTER TABLE Tasks DROP COLUMN group_id")
+            conn.execute("ALTER TABLE Todos DROP COLUMN group_id")
         conn.commit()
         return conn
 
-    def add_task(
+    def add_todo(
         self,
         creator: str,
         umo: str,
@@ -82,129 +82,129 @@ class TaskDB:
         completed: bool = False,
     ) -> int:
         """
-        将任务添加到数据库中
-        :param umo: 添加任务的聊天窗口ID
+        将待办添加到数据库中
+        :param umo: 添加待办的聊天窗口ID
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                    insert into Tasks (creator, umo, content, due_time, completed) VALUES (?, ?, ?, ?, ?)
+                    insert into Todos (creator, umo, content, due_time, completed) VALUES (?, ?, ?, ?, ?)
                 """,
                 (creator, umo, content, due_time, int(completed)),
             )
-            new_task_id = cursor.lastrowid
-        assert new_task_id is not None
-        return new_task_id
+            new_todo_id = cursor.lastrowid
+        assert new_todo_id is not None
+        return new_todo_id
 
-    def get_task_by_id(self, task_id: int) -> Task | None:
+    def get_todo_by_id(self, todo_id: int) -> Todo | None:
         """
-        获取指定任务ID的任务
+        获取指定ID的待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where task_id = ?",
-                (task_id,),
+                "select * from Todos where todo_id = ?",
+                (todo_id,),
             )
         row: s3.Row | None = cursor.fetchone()
         if row is None:
-            logger.error("任务 {} 不存在".format(task_id))
+            logger.error("待办 {} 不存在".format(todo_id))
             return None
-        return Task.from_db_row(row)
+        return Todo.from_db_row(row)
 
-    def get_tasks_by_umo(self, umo: str) -> List[Task]:
+    def get_todo_by_umo(self, umo: str) -> List[Todo]:
         """
-        获取指定聊天窗口内布置的所有任务
+        获取指定聊天窗口内布置的所有待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where umo = ?",
+                "select * from Todos where umo = ?",
                 (umo,),
             )
         rows: List[s3.Row] = cursor.fetchall()
         for row in rows:
             logger.info(row)
-        return [Task.from_db_row(row) for row in rows]
+        return [Todo.from_db_row(row) for row in rows]
 
-    def get_tasks_by_creator(self, creator: str) -> List[Task]:
+    def get_todo_by_creator(self, creator: str) -> List[Todo]:
         """
-        获取指定用户创建的所有任务
+        获取指定用户创建的所有待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select * from Tasks where creator = ?",
+                "select * from Todos where creator = ?",
                 (creator,),
             )
         rows: List[s3.Row] = cursor.fetchall()
-        return [Task.from_db_row(row) for row in rows]
+        return [Todo.from_db_row(row) for row in rows]
 
-    def get_pending_task_ids_with_due_time(self):
+    def get_pending_todo_ids_with_due_time(self):
         """
-        获取所有未完成的任务ID和到期时间
+        获取所有未完成的待办ID和到期时间
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "select task_id, due_time from Tasks where completed = 0",
+                "select todo_id, due_time from Todos where completed = 0",
             )
         rows: List[s3.Row] = cursor.fetchall()
         return [(row[0], row[1]) for row in rows]
 
-    def mark_task_as_completed(self, task_id: int):
+    def mark_todo_as_completed(self, todo_id: int):
         """
-        标记任务为已完成
+        标记待办为已完成
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "update Tasks set completed = 1 where task_id = ?",
-                (task_id,),
+                "update Todos set completed = 1 where todo_id = ?",
+                (todo_id,),
             )
 
-    def update_task(
-        self, task_id: int, content: str, due_time: int, completed: bool
+    def update_todo(
+        self, todo_id: int, content: str, due_time: int, completed: bool
     ) -> bool:
         """
-        更新任务的内容和到期时间
+        更新待办的内容和到期时间
         :return: 是否有更新某一行
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "update Tasks set content = ?, due_time = ?, completed = ? where task_id = ?",
-                (content, due_time, int(completed), task_id),
+                "update Todos set content = ?, due_time = ?, completed = ? where todo_id = ?",
+                (content, due_time, int(completed), todo_id),
             )
             return cursor.rowcount > 0
 
-    def delete_task(self, task_id: int):
+    def delete_todo(self, todo_id: int):
         """
-        删除指定任务
+        删除指定待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "delete from Tasks where task_id = ?",
-                (task_id,),
+                "delete from Todos where todo_id = ?",
+                (todo_id,),
             )
 
-    def clear_tasks_by_umo(self, umo: str):
+    def clear_todos_by_umo(self, umo: str):
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "delete from Tasks where umo = ?",
+                "delete from Todos where umo = ?",
                 (umo,),
             )
 
-    def clear_tasks_by_sender_id(self, sender_id: str):
+    def clear_todos_by_sender_id(self, sender_id: str):
         """
-        删除指定用户创建的所有任务
+        删除指定用户创建的所有待办
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "delete from Tasks where creator = ?",
+                "delete from Todos where creator = ?",
                 (sender_id,),
             )

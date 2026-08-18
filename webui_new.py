@@ -9,7 +9,7 @@ from astrbot.api import logger
 from hypercorn.config import Config
 from quart import Quart, jsonify, request, send_from_directory, session
 
-from .db import EditTaskPayload, Task
+from .db import EditTodoPayload, Todo
 from .shared_types import LoginPayload
 from .todo_manager import TodoManager
 
@@ -145,8 +145,8 @@ class WebUIServer:
                 return api_error(401, "未登录")
             return api_success(sender_id=sender_id)
 
-        @self.app.route("/api/tasks", methods=["GET"])
-        async def list_tasks():
+        @self.app.route("/api/todos", methods=["GET"])
+        async def list_todos():
             """
             获取当前登陆用户的所有任务。
             任务按到期时间排序，最早到期在前。
@@ -154,89 +154,87 @@ class WebUIServer:
             sender_id = self.current_session_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
-            tasks: List[Task] = self.tm.db.get_tasks_by_creator(sender_id)
-            tasks.sort(key=lambda t: t.due_time)
-            return api_success(tasks=[t.model_dump() for t in tasks])
+            todos: List[Todo] = self.tm.db.get_todo_by_creator(sender_id)
+            todos.sort(key=lambda t: t.due_time)
+            return api_success(todos=[t.model_dump() for t in todos])
 
-        @self.app.route("/api/tasks", methods=["POST"])
-        async def create_task():
+        @self.app.route("/api/todos", methods=["POST"])
+        async def create_todo():
             sender_id = self.current_session_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
             # 尝试获取前端传来的数据，并进行检验
             try:
-                data: EditTaskPayload = await request.get_json(silent=True)
+                data: EditTodoPayload = await request.get_json(silent=True)
             except pydantic.ValidationError:
                 return api_error(400, "内容、时间、umo 不能为空")
             content = data["content"].strip()
             due_time = data["due_time"]
             completed = data["completed"]
 
-            task_id = self.tm.create_task(
+            todo_id = self.tm.create_todo(
                 creator=sender_id,
                 umo=self.sender_id_2_umo[sender_id],
                 content=content,
                 due_time=due_time,
                 completed=completed,
             )
-            if task_id == -1:
+            if todo_id == -1:
                 logger.error(f"WebUI 创建任务失败：任务到期时间太早")
                 return api_error(500, f"创建失败：任务到期时间太早")
 
-            return api_success(message="任务创建成功", task_id=task_id)
+            return api_success(message="任务创建成功", todo_id=todo_id)
 
-        @self.app.route("/api/tasks/<int:task_id>", methods=["PUT"])
-        async def update_task(task_id):
+        @self.app.route("/api/todos/<int:todo_id>", methods=["PUT"])
+        async def update_todo(todo_id):
             sender_id = self.current_session_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
-            data: EditTaskPayload = await request.get_json(silent=True)
+            data: EditTodoPayload = await request.get_json(silent=True)
             content = data["content"]
             due_time = data["due_time"]
             completed = data["completed"]
             if not content or not due_time:
                 return api_error(400, "内容、到期时间不能为空")
 
-            task = self.tm.db.get_task_by_id(task_id)
-            if not task or task.creator != sender_id:
+            todo = self.tm.db.get_todo_by_id(todo_id)
+            if not todo or todo.creator != sender_id:
                 return api_error(404, "任务未找到或无权限")
-            updated_task_id = self.tm.update_task(task_id, content, due_time, completed)
-            if updated_task_id == -1:
+            updated_todo_id = self.tm.update_todo(todo_id, content, due_time, completed)
+            if updated_todo_id == -1:
                 return api_error(500, "更新失败：任务不存在")
 
-            return api_success(message="任务已更新", task_id=updated_task_id)
+            return api_success(message="任务已更新", todo_id=updated_todo_id)
 
-        @self.app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
-        async def delete_task(task_id):
+        @self.app.route("/api/todos/<int:todo_id>", methods=["DELETE"])
+        async def delete_todo(todo_id):
             sender_id = self.current_session_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
-            task = self.tm.db.get_task_by_id(task_id)
-            if not task or task.creator != sender_id:
+            todo = self.tm.db.get_todo_by_id(todo_id)
+            if not todo or todo.creator != sender_id:
                 return api_error(404, "任务未找到或无权限")
 
-            self.tm.db.delete_task(task_id)
-            timer = self.tm.active_timers.pop(task_id, None)
+            self.tm.db.delete_todo(todo_id)
+            timer = self.tm.active_timers.pop(todo_id, None)
             if timer and not timer.done():
                 timer.cancel()
             return api_success(message="任务已删除")
 
-        # --- Server lifecycle ---
-        async def start_server(port: int = 5001):
-            self.app.secret_key = secrets.token_urlsafe(
-                32
-            )  # 听说是用于session加密的密钥
+    # --- Server lifecycle ---
+    async def start_server(self, port: int = 5001):
+        self.app.secret_key = secrets.token_urlsafe(32)  # 听说是用于session加密的密钥
 
-            hypercorn_config = Config()
-            hypercorn_config.bind = [f"0.0.0.0:{port}"]
-            hypercorn_config.graceful_timeout = 5
+        hypercorn_config = Config()
+        hypercorn_config.bind = [f"0.0.0.0:{port}"]
+        hypercorn_config.graceful_timeout = 5
 
-            # Provide a shutdown trigger so hypercorn skips its signal-handler
-            # setup, which crashes in a non-main thread on Windows.
-            shutdown_event = asyncio.Event()
-            await hypercorn.asyncio.serve(
-                self.app, hypercorn_config, shutdown_trigger=shutdown_event.wait
-            )
+        # Provide a shutdown trigger so hypercorn skips its signal-handler
+        # setup, which crashes in a non-main thread on Windows.
+        shutdown_event = asyncio.Event()
+        await hypercorn.asyncio.serve(
+            self.app, hypercorn_config, shutdown_trigger=shutdown_event.wait
+        )

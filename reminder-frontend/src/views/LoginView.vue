@@ -14,7 +14,7 @@ const key = ref("")
 const loading = ref(false) // * 登录按钮用
 
 /**
- * 处理登录事件。若登录成功，则路由到任务页
+ * 处理登录事件。若登录成功，则路由到待办页
  */
 async function handleLogin() {
   // 首先确认密钥非空
@@ -36,7 +36,7 @@ async function handleLogin() {
 }
 
 onMounted(async () => {
-  // 检查是否已登录，若是，则直接跳转到任务页
+  // 检查是否已登录，若是，则直接跳转到待办页
   let isAlready = await checkIfAlreadyLoggedIn();
   if (isAlready !== null) {
     router.push("/todo")  // * 通过这个实现跳转
@@ -46,7 +46,7 @@ onMounted(async () => {
 
 <template>
   <div class="container">
-    <n-card class="login-card shadow-edge" title="个人任务管理">
+    <n-card class="login-card shadow-edge" title="个人待办管理">
       <n-form label-placement="top">
         <n-form-item label="登录密钥">
           <n-input v-model:value="key" type="password" placeholder="请输入登录密钥" @keyup.enter="handleLogin" />

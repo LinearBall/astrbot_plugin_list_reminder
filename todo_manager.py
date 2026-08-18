@@ -1,12 +1,20 @@
 import asyncio
 from datetime import datetime
 from typing import Dict, List
+from venv import logger
 
-from astrbot.api import logger
 from astrbot.api.star import Context
 from astrbot.core.message.message_event_result import MessageChain
 
-from .db import Task, TaskDB
+from .db import Todo, TodoDB
+
+
+def get_delay(due_time: float):
+    """按照到期时间计算，多少时间以后发送提醒。
+
+    如果返回负值，则说明到期时间设置得太早。换句话说，任务已过期。
+    """
+    return due_time - datetime.now().timestamp()
 
 
 class TodoManager:
@@ -14,10 +22,10 @@ class TodoManager:
 
     def __init__(self, context: Context):
         self.context = context
-        self.db = TaskDB()
+        self.db = TodoDB()
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
-    def create_task(
+    def create_todo(
         self,
         creator: str,
         umo: str,
@@ -28,111 +36,106 @@ class TodoManager:
         """
         创建一个新任务，并开始倒计时。若创建失败，则返回-1
         """
-        new_task_id = self.db.add_task(creator, umo, content, due_time, completed)
-        if (
-            count_down_task := self.count_down_to_remind(new_task_id, due_time)
-        ) is not None:
-            self.active_timers[new_task_id] = count_down_task
-            return new_task_id
-        return -1
-
-    def update_task(
-        self, task_id: int, content: str, due_time: int, completed: bool
-    ) -> int:
-        # todo: 统一使用EditPayload
-        """
-        更新任务内容与到期时间。
-        若任务存在则更新并重设定时器，返回原task_id；否则返回 -1。
-        """
-        task = self.db.get_task_by_id(task_id)
-        if task is None:
+        if get_delay(due_time) < 0:
             return -1
 
-        updated = self.db.update_task(task_id, content, due_time, completed)
+        new_todo_id = self.db.add_todo(creator, umo, content, due_time, completed)
+        self.active_timers[new_todo_id] = self.count_down_to_remind(
+            new_todo_id, due_time
+        )
+        return new_todo_id
+
+    def update_todo(
+        self, todo_id: int, content: str, due_time: int, completed: bool
+    ) -> int:
+        """
+        更新任务内容与到期时间。
+        若任务存在则更新并重设定时器，返回原todo_id；否则返回 -1。
+        """
+        todo = self.db.get_todo_by_id(todo_id)
+        if todo is None:
+            return -1
+
+        updated = self.db.update_todo(todo_id, content, due_time, completed)
         if not updated:
             return -1
 
         # 取消旧的定时器，根据新的到期时间重新安排
-        old_timer = self.active_timers.pop(task_id, None)
+        old_timer = self.active_timers.pop(todo_id, None)
         if old_timer and not old_timer.done():
             old_timer.cancel()
 
-        updated_task = self.db.get_task_by_id(task_id)
+        updated_todo = self.db.get_todo_by_id(todo_id)
         if (
-            updated_task is not None
-            and not updated_task.completed
-            and due_time > datetime.now().timestamp()
+            updated_todo is not None
+            and not updated_todo.completed
+            and get_delay(due_time) > 0
         ):
-            count_down_task = self.count_down_to_remind(task_id, due_time)
-            if count_down_task is not None:
-                self.active_timers[task_id] = count_down_task
+            self.active_timers[todo_id] = self.count_down_to_remind(todo_id, due_time)
 
-        return task_id
+        return todo_id
 
-    async def count_down_for_pending_tasks_immediately(self):
+    async def count_down_for_pending_todos_immediately(self):
         """
         从数据库加载所有未完成任务，立即开始倒计时
         """
-        pending_tasks = self.db.get_pending_task_ids_with_due_time()
-        for task_id, due_time in pending_tasks:
-            if (
-                self.active_timers.get(task_id) is None
-                and (count_down_task := self.count_down_to_remind(task_id, due_time))
-                is not None
-            ):
-                self.active_timers[task_id] = count_down_task
+        pending_todos = self.db.get_pending_todo_ids_with_due_time()
+        counter = 0
+        for todo_id, due_time in pending_todos:
+            if self.active_timers.get(todo_id) is None and get_delay(due_time) > 0:
+                counter += 1
+                self.active_timers[todo_id] = self.count_down_to_remind(
+                    todo_id, due_time
+                )
+        if counter > 0:
+            logger.info("成功恢复了{}个活待办事项".format(counter))
 
-    def count_down_to_remind(
-        self, task_id: int, due_time: float
-    ) -> asyncio.Task | None:
+    def count_down_to_remind(self, todo_id: int, due_time: float) -> asyncio.Task:
         """
-        检查倒计时时长。若为正，则启动新协程进行倒计时，并返回该协程；否则返回None
+        启动新协程进行倒计时，并返回该协程
         """
-        cur_time = datetime.now().timestamp()
-        delay = due_time - cur_time
-        if delay <= 0:
-            logger.error("任务 {} 已过期！".format(task_id))
-            return None
-        return asyncio.create_task(self.__send_reminder_after(task_id, delay))
+        return asyncio.create_task(
+            self.__send_reminder_after(todo_id, get_delay(due_time))
+        )
 
-    async def __send_reminder_after(self, task_id: int, delay: float):
+    async def __send_reminder_after(self, todo_id: int, delay: float):
         """
         倒计时协程。完成后，将任务标记为已完成
         """
         await asyncio.sleep(delay)
-        task = self.db.get_task_by_id(task_id)
-        assert task is not None
-        remind_msg = MessageChain().message(task.content)
-        await self.context.send_message(task.umo, remind_msg)
-        self.db.mark_task_as_completed(task_id)
-        del self.active_timers[task_id]
+        todo = self.db.get_todo_by_id(todo_id)
+        assert todo is not None
+        remind_msg = MessageChain().message(todo.content)
+        await self.context.send_message(todo.umo, remind_msg)
+        self.db.mark_todo_as_completed(todo_id)
+        del self.active_timers[todo_id]
 
-    def get_tasks_by_umo(self, umo: str) -> List[Task]:
+    def get_todos_by_umo(self, umo: str) -> List[Todo]:
         """
         获取指定聊天窗口内布置的所有任务
         """
-        return self.db.get_tasks_by_umo(umo)
+        return self.db.get_todo_by_umo(umo)
 
-    def clear_tasks_by_umo(self, umo: str):
+    def clear_todos_by_umo(self, umo: str):
         """
         清空指定聊天窗口内布置的所有任务
         """
-        tasks_to_clear = self.get_tasks_by_umo(umo)
-        for task in tasks_to_clear:
-            del self.active_timers[task.task_id]
-        self.db.clear_tasks_by_umo(umo)
+        todos_to_clear = self.get_todos_by_umo(umo)
+        for each in todos_to_clear:
+            del self.active_timers[each.todo_id]
+        self.db.clear_todos_by_umo(umo)
 
-    def get_tasks_by_creator(self, creator: str) -> List[Task]:
+    def get_todos_by_creator(self, creator: str) -> List[Todo]:
         """
         获取指定用户创建的所有任务
         """
-        return self.db.get_tasks_by_creator(creator)
+        return self.db.get_todo_by_creator(creator)
 
-    def clear_tasks_by_sender_id(self, sender_id: str):
+    def clear_todos_by_sender_id(self, sender_id: str):
         """
         清空指定用户创建的所有任务
         """
-        tasks_to_clear = self.get_tasks_by_creator(sender_id)
+        tasks_to_clear = self.get_todos_by_creator(sender_id)
         for task in tasks_to_clear:
-            del self.active_timers[task.task_id]
-        self.db.clear_tasks_by_sender_id(sender_id)
+            del self.active_timers[task.todo_id]
+        self.db.clear_todos_by_sender_id(sender_id)
