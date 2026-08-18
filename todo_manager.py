@@ -80,15 +80,17 @@ class TodoManager:
         从数据库加载所有未完成任务，立即开始倒计时
         """
         pending_todos = self.db.get_pending_todo_ids_with_due_time()
-        counter = 0
         for todo_id, due_time in pending_todos:
-            if self.active_timers.get(todo_id) is None and get_delay(due_time) > 0:
-                counter += 1
+            if todo_id not in self.active_timers and get_delay(due_time) > 0:
                 self.active_timers[todo_id] = self.count_down_to_remind(
                     todo_id, due_time
                 )
-        if counter > 0:
-            logger.info("成功恢复了{}个活待办事项".format(counter))
+            else:
+                # 设置1秒后提醒，近似于立即提醒，但不能立即提醒，会报错
+                self.active_timers[todo_id] = self.count_down_to_remind(
+                    todo_id, datetime.now().timestamp() + 1
+                )
+        logger.info("成功恢复了{}个活待办事项".format(len(pending_todos)))
 
     def count_down_to_remind(self, todo_id: int, due_time: float) -> asyncio.Task:
         """

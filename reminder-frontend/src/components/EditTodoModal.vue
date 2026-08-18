@@ -82,7 +82,7 @@ function handleSave() {
     </n-form>
 
     <template #footer>
-      <div class="modal-footer">
+      <div style="display: flex; justify-content: flex-end;">
         <n-button-group>
           <n-button ghost :bordered="false" type="error" @click="emit('close')">
             <n-icon>
@@ -100,10 +100,4 @@ function handleSave() {
   </n-modal>
 </template>
 
-<style scoped>
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-</style>
+<style scoped></style>

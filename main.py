@@ -141,7 +141,7 @@ class ListReminderPlugin(Star):
             due_time=due_timestamp.timestamp(),  # 单位为second
         )
 
-        if task_id:
+        if task_id >= 0:
             yield event.plain_result(f"✅ 任务已创建：{task_info['content']}")
         else:
             yield event.plain_result("❌ 任务创建失败")
