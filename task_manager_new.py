@@ -17,11 +17,11 @@ class TaskManagerNew:
         self.db = TaskDB()
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
-    def create_task(self, creator: str, umo: str, content: str, due_time: float) -> int:
+    def create_task(self, creator: str, umo: str, content: str, due_time: float, completed: bool = False) -> int:
         """
         创建一个新任务，并开始倒计时。若创建失败，则返回-1
         """
-        new_task_id = self.db.add_task(creator, umo, content, due_time)
+        new_task_id = self.db.add_task(creator, umo, content, due_time, completed)
         if (
             count_down_task := self.count_down_to_remind(new_task_id, due_time)
         ) is not None:
@@ -29,7 +29,8 @@ class TaskManagerNew:
             return new_task_id
         return -1
 
-    def update_task(self, task_id: int, content: str, due_time: int) -> int:
+    def update_task(self, task_id: int, content: str, due_time: int, completed: bool) -> int:
+        # todo: 统一使用EditPayload
         """
         更新任务内容与到期时间。
         若任务存在则更新并重设定时器，返回原task_id；否则返回 -1。
@@ -38,7 +39,7 @@ class TaskManagerNew:
         if task is None:
             return -1
 
-        updated = self.db.update_task(task_id, content, due_time)
+        updated = self.db.update_task(task_id, content, due_time, completed)
         if not updated:
             return -1
 

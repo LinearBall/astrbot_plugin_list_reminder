@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-
-import type { EditTaskPayload, Task } from '@/types.ts'
-import { checkIfAlreadyLoggedIn, logout, getTasks, delTaskById, updateTaskById } from '@/fbApi/apis.ts'
-import EditTaskModal from '@/components/EditTaskModal.vue'
-import { NButton, NButtonGroup, NIcon, useMessage } from "naive-ui"
-import { DocumentEdit20Regular, Delete20Regular } from "@vicons/fluent";
-import { RefreshFilled, LogOutFilled, PlusFilled, FolderCopyOutlined } from "@vicons/material";
+// Vue机能
+import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+// Naive UI机能
+import { Delete20Regular, DocumentEdit20Regular } from "@vicons/fluent";
+import { LogOutFilled, PlusFilled, RefreshFilled } from "@vicons/material";
+import { NButton, NButtonGroup, NCard, NCheckbox, NIcon, NList, NListItem, NText, useMessage } from "naive-ui";
+// 自定义机能
+import EditTaskModal from '@/components/EditTaskModal.vue';
+import { checkIfAlreadyLoggedIn, delTaskById, getTasks, logout, updateTaskById } from '@/fbApi/apis.ts';
+import type { EditTaskPayload, Task } from '@/types.ts';
 
 const router = useRouter()
 const message = useMessage();
@@ -30,7 +32,7 @@ function refreshTasks() {
 
 function toLocalISOString(timestamp: number) {
   const date = new Date(timestamp > 1e11 ? timestamp : timestamp * 1000);
-  // 减去时区偏差
+  // 由于JS会强行把时间转到UTC-0，因此需要减去时区偏差
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
   // 截取前 19 位：YYYY-MM-DDTHH:mm:ss
   return localDate.toISOString().slice(0, 19);
@@ -68,10 +70,7 @@ function closeEditModal() {
  * @param payload 要更新的任务的具体信息
  */
 async function handleEditSaved(payload: EditTaskPayload) {
-  updateTaskById(payload.task_id, {
-    content: payload.content,
-    due_time: payload.due_time,
-  }).then(res => {
+  updateTaskById(payload).then(res => {
     if (res.code === 200) {
       closeEditModal()
       refreshTasks()
@@ -81,8 +80,20 @@ async function handleEditSaved(payload: EditTaskPayload) {
   });
 }
 
-async function handleCompletionStatus(curVal: boolean) {
-  // todo: 发送更新请求到后端更新任务状态
+async function handleCompletionStatus(curTask: Task) {
+  let payload: EditTaskPayload = {
+    task_id: curTask.task_id,
+    content: curTask.content,
+    due_time: curTask.due_time,
+    completed: curTask.completed
+  }
+  updateTaskById(payload).then(res => {
+    if (res.code === 200) {
+      refreshTasks();
+    } else {
+      message.error(`更新任务失败(${res.code}): \n${res.payload}`)
+    }
+  });
 }
 
 onMounted(async () => {
@@ -130,7 +141,7 @@ onMounted(async () => {
         <n-list-item v-for="task in tasks" :key="task.task_id">
           <hr />
           <div class="task-item">
-            <n-checkbox v-model:checked="task.completed" @update:checked="handleCompletionStatus" />
+            <n-checkbox v-model:checked="task.completed" @update:checked="handleCompletionStatus(task)" />
             <div class="task-content">
               <!-- 任务具体内容的文本 -->
               <div class="task-content-text" :class="{ 'is-completed': task.completed }">

@@ -38,12 +38,13 @@ class ListReminderPlugin(Star):
         self.llm_provider_id = self.config.get("llm_provider_id")
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
 
+        # 设置task_manager引用到webui
+        webui.set_task_manager(self.task_manager_new)
+
         # WebUI
         self.webui_task: asyncio.Task | None = None
         self.webui_port = self.config.get("webui_port", 5001)
-
-        # 设置task_manager引用到webui
-        webui.set_task_manager(self.task_manager_new)
+        self.__restart_webui()
 
     async def initialize(self):
         """插件初始化"""
@@ -51,14 +52,31 @@ class ListReminderPlugin(Star):
         await self.task_manager_new.count_down_for_pending_tasks_immediately()
         logger.info("ListReminderPlugin 加载完成")
 
+    def __restart_webui(self):
+        # 取消正在运行的实例
+        if self.webui_task and not self.webui_task.done():
+            self.webui_task.cancel()
+        logger.info("现有实例已关闭，正在重新启动新实例……")
+        self.webui_task = asyncio.create_task(
+            webui.start_server(self.config, self.task_manager_new)
+        )
+        logger.info("新实例已启动")
+
     @filter.command_group("列表提醒")
     def reminder_commands(self):
         """列表提醒命令组
-        列表
-        清空
-        后台
+        - 列表
+        - 清空
+        - 后台
+        - 重启后台
         """
         pass
+
+    @reminder_commands.command("重启后台")
+    async def restart_webui(self, event: AstrMessageEvent):
+        """重启后台管理界面"""
+        self.__restart_webui()
+        yield event.plain_result("✅ 后台已重启")
 
     @reminder_commands.command("列表")
     async def list_tasks(self, event: AstrMessageEvent):
@@ -93,15 +111,10 @@ class ListReminderPlugin(Star):
 
         # 识别当前用户？
         sender_id = event.get_sender_id()
-        # 先取消已有的任务，确保只启动一个实例
-        if self.webui_task and not self.webui_task.done():
-            self.webui_task.cancel()
         # 为当前用户注册新的个人密钥（绑定 sender_id）
         key = webui.issue_login_key(sender_id)
         webui.register_umo_to_sender(sender_id, event.unified_msg_origin)
-        self.webui_task = asyncio.create_task(
-            webui.start_server(self.config, self.task_manager_new)
-        )
+
         yield event.plain_result(
             f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
         )
@@ -200,6 +213,10 @@ class ListReminderPlugin(Star):
             {"content": str, "time": ""} when time cannot be parsed,
             None on error.
         """
+        logger.info(msg)
+        if msg.startswith("/"):
+            # 是用户指令，不执行解析
+            return None
         try:
             provider_id = (
                 self.schedule_detection_provider_id

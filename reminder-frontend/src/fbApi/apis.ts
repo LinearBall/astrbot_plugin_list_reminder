@@ -62,22 +62,13 @@ async function delTaskById(taskId: number) {
  * @param payload 要更新的内容和截止时间
  * @returns 更新结果
  */
-async function updateTaskById(taskId: number, payload: Pick<EditTaskPayload, "content" | "due_time">) {
-    if (taskId < 0) {
-        // class EditTaskPayload(TypedDict):
-        // task_id: int
-        // content: str
-        // due_time: int
-        let resp = await http.post<ApiResp>("/api/tasks", {
-            task_id: taskId, // 无所谓
-            content: payload.content,
-            due_time: payload.due_time,
-        });
-        return resp.data as ApiResp;
-    } else {
-        let resp = await http.put<ApiResp>(`/api/tasks/${taskId}`, payload);
-        return resp.data as ApiResp;
-    }
+async function updateTaskById(payload: EditTaskPayload) {
+    let taskId = payload.task_id;
+    return http({
+        method: taskId < 0 ? "POST" : "PUT",
+        url: taskId < 0 ? "/api/tasks" : `/api/tasks/${taskId}`,
+        data: payload,
+    }).then(res => res.data as ApiResp);
 }
 
 export { checkIfAlreadyLoggedIn, checkKey, logout, getTasks, delTaskById, updateTaskById }

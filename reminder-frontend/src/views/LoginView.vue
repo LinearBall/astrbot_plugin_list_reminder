@@ -1,7 +1,10 @@
 <script setup lang="ts">
+// Vue机能
 import { ref, onMounted } from "vue"
 import { useRouter } from "vue-router"
-import { useMessage } from "naive-ui"
+// Naive UI机能
+import { NCard, NButton, NForm, NFormItem, NInput, useMessage } from "naive-ui"
+// 自定义机能
 import { checkIfAlreadyLoggedIn, checkKey } from "@/fbApi/apis"
 
 const router = useRouter()

@@ -36,6 +36,7 @@ class EditTaskPayload(TypedDict):
     task_id: int
     content: str
     due_time: int
+    completed: bool
 
 
 class TaskDB:
@@ -78,6 +79,7 @@ class TaskDB:
         umo: str,
         content: str,
         due_time: float,
+        completed: bool = False,
     ) -> int:
         """
         将任务添加到数据库中
@@ -87,9 +89,9 @@ class TaskDB:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                    insert into Tasks (creator, umo, content, due_time) VALUES (?, ?, ?, ?)
+                    insert into Tasks (creator, umo, content, due_time, completed) VALUES (?, ?, ?, ?, ?)
                 """,
-                (creator, umo, content, due_time),
+                (creator, umo, content, due_time, int(completed)),
             )
             new_task_id = cursor.lastrowid
         assert new_task_id is not None
@@ -162,15 +164,18 @@ class TaskDB:
                 (task_id,),
             )
 
-    def update_task(self, task_id: int, content: str, due_time: int) -> bool:
+    def update_task(
+        self, task_id: int, content: str, due_time: int, completed: bool
+    ) -> bool:
         """
         更新任务的内容和到期时间
+        :return: 是否有更新某一行
         """
         with self.conn as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "update Tasks set content = ?, due_time = ? where task_id = ?",
-                (content, due_time, task_id),
+                "update Tasks set content = ?, due_time = ?, completed = ? where task_id = ?",
+                (content, due_time, int(completed), task_id),
             )
             return cursor.rowcount > 0
 

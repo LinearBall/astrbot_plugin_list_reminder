@@ -11,6 +11,7 @@ export interface EditTaskPayload {
     task_id: number
     content: string
     due_time: number
+    completed: boolean
 }
 
 export interface ApiResp {

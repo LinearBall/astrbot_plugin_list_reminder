@@ -1,18 +1,29 @@
 import asyncio
 import secrets
+from pathlib import Path
 from typing import Dict, List
 
 import hypercorn.asyncio
+import pydantic
 from astrbot.api import logger
 from hypercorn.config import Config
-from quart import Quart, jsonify, redirect, render_template, request, session, url_for
+from quart import (
+    Quart,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 
-from .db import Task, EditTaskPayload
-import pydantic
+from .db import EditTaskPayload, Task
 from .shared_types import LoginPayload
 from .task_manager_new import TaskManagerNew
 
 APP = Quart(__name__)
+DIST_DIR = Path(__file__).parent / "dist"
 # Runtime state, configured in start_server()
 TASK_MANAGER: TaskManagerNew | None = None
 # Active per-user login keys. Format = {key: sender_id}
@@ -87,49 +98,62 @@ def api_error(code: int, message: str, **extra):
 
 @APP.before_request
 async def check_if_logged_in():
+    # 1. 允许放行已有登录会话的用户
     if current_session_sender_id():
         return None
-    # 区分api访问和原版访问
+    # 2. 区分api访问和原版访问
     if request.path.startswith("/api/"):
         if request.endpoint in PUBLIC_API_ENDPOINTS:
             return None
         return api_error(401, "未登录！")
-    if request.endpoint not in PUBLIC_ENDPOINTS:
-        return redirect(url_for("login"))
+    # if request.endpoint not in PUBLIC_ENDPOINTS:
+    #     return redirect(url_for("login"))
     return None
 
 
 # --- Routes ---
 
 
-@APP.route("/health")
-async def health_check():
-    return api_success(status="running")
+# @APP.route("/health")
+# async def health_check():
+#     return api_success(status="running")
 
 
-@APP.route("/login", methods=["GET", "POST"])
-async def login():
-    if current_session_sender_id():
-        return redirect(url_for("index"))
-    error = None
-    if request.method == "POST":
-        form = await request.form
-        if form.get("key") in LOGIN_KEYS:
-            session["login_key"] = form.get("key")
-            return redirect(url_for("index"))
-        error = "密钥错误，请重试。"
-    return await render_template("login.html", error=error)
+# @APP.route("/login", methods=["GET", "POST"])
+# async def login():
+#     if current_session_sender_id():
+#         return redirect(url_for("index"))
+#     error = None
+#     if request.method == "POST":
+#         form = await request.form
+#         if form.get("key") in LOGIN_KEYS:
+#             session["login_key"] = form.get("key")
+#             return redirect(url_for("index"))
+#         error = "密钥错误，请重试。"
+#     return await render_template("login.html", error=error)
 
 
-@APP.route("/logout", methods=["POST"])
-async def logout():
-    session.clear()
-    return redirect(url_for("login"))
+# @APP.route("/logout", methods=["POST"])
+# async def logout():
+#     session.clear()
+#     return redirect(url_for("login"))
 
 
-@APP.route("/")
-async def index():
-    return await render_template("index.html")
+@APP.route("/", defaults={"pp": ""})
+@APP.route("/<path:pp>")
+# async def index():
+#     return await render_template("index.html")
+async def serve_vue_spa(pp: str):
+    if pp.startswith("api/"):
+        # 没有被其他/api/...路由走，说明这个接口不存在
+        return api_error(404, "接口不存在")
+    target_file = DIST_DIR / pp
+    if pp != "" and target_file.exists() and target_file.is_file():
+        # 说明访问的是某个文件
+        return await send_from_directory(DIST_DIR, pp)
+    else:
+        # 否则重定向到首页
+        return await send_from_directory(DIST_DIR, "index.html")
 
 
 # --- API ---
@@ -207,18 +231,47 @@ async def create_task():
         return api_error(400, "内容、时间、umo 不能为空")
     content = data["content"].strip()
     due_time = data["due_time"]
+    completed = data["completed"]
 
     task_id = tm.create_task(
         creator=sender_id,
         umo=SENDER_ID2UMO[sender_id],
         content=content,
         due_time=due_time,
+        completed=completed,
     )
     if task_id == -1:
-        logger.error(f"WebUI 创建任务失败")
+        logger.error(f"WebUI 创建任务失败：任务到期时间太早")
         return api_error(500, f"创建失败：任务到期时间太早")
 
     return api_success(message="任务创建成功", task_id=task_id)
+
+
+@APP.route("/api/tasks/<int:task_id>", methods=["PUT"])
+async def update_task(task_id):
+    # todo: completed字段的更新
+    tm = TASK_MANAGER
+    if tm is None:
+        return api_error(503, "任务管理器不可用")
+    sender_id = current_session_sender_id()
+    if not sender_id:
+        return api_error(401, "未登录")
+
+    data: EditTaskPayload = await request.get_json(silent=True)
+    content = data["content"]
+    due_time = data["due_time"]
+    completed = data["completed"]
+    if not content or not due_time:
+        return api_error(400, "内容、到期时间不能为空")
+
+    task = tm.db.get_task_by_id(task_id)
+    if not task or task.creator != sender_id:
+        return api_error(404, "任务未找到或无权限")
+    updated_task_id = tm.update_task(task_id, content, due_time, completed)
+    if updated_task_id == -1:
+        return api_error(500, "更新失败：任务不存在")
+
+    return api_success(message="任务已更新", task_id=updated_task_id)
 
 
 @APP.route("/api/tasks/<int:task_id>", methods=["DELETE"])
@@ -239,31 +292,6 @@ async def delete_task(task_id):
     if timer and not timer.done():
         timer.cancel()
     return api_success(message="任务已删除")
-
-
-@APP.route("/api/tasks/<int:task_id>", methods=["PUT"])
-async def update_task(task_id):
-    tm = TASK_MANAGER
-    if tm is None:
-        return api_error(503, "任务管理器不可用")
-    sender_id = current_session_sender_id()
-    if not sender_id:
-        return api_error(401, "未登录")
-
-    data: EditTaskPayload = await request.get_json(silent=True)
-    content = data["content"]
-    due_time = data["due_time"]
-    if not content or not due_time:
-        return api_error(400, "内容、到期时间不能为空")
-
-    task = tm.db.get_task_by_id(task_id)
-    if not task or task.creator != sender_id:
-        return api_error(404, "任务未找到或无权限")
-    updated_task_id = tm.update_task(task_id, content, due_time)
-    if updated_task_id == -1:
-        return api_error(500, "更新失败：任务不存在")
-
-    return api_success(message="任务已更新", task_id=updated_task_id)
 
 
 # --- Server lifecycle ---
