@@ -1,6 +1,7 @@
 ﻿import asyncio
 import json
 import re
+import urllib.request
 from datetime import datetime, timedelta
 from typing import TypedDict
 
@@ -113,7 +114,7 @@ class ListReminderPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
-        """监听消息，智能识别任务需求"""
+        """ALL监听所有消息，智能识别任务需求"""
         msg = event.message_str
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
@@ -295,3 +296,4 @@ class ListReminderPlugin(Star):
         except Exception as e:
             logger.error(f"提取任务失败: {e}")
             return None
+

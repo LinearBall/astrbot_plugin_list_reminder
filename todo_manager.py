@@ -6,7 +6,7 @@ from venv import logger
 from astrbot.api.star import Context
 from astrbot.core.message.message_event_result import MessageChain
 
-from .db import Todo, TodoDB
+from .db import TagDB, Todo, TodoDB, UserDB
 
 
 def get_delay(due_time: float):
@@ -23,6 +23,8 @@ class TodoManager:
     def __init__(self, context: Context):
         self.context = context
         self.db = TodoDB()
+        self.user_db = UserDB(self.db)
+        self.tag_db = TagDB(self.db)
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
     def create_todo(
