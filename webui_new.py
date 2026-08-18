@@ -38,6 +38,7 @@ class WebUIServer:
         self.app = Quart(__name__)
         self.login_keys: Dict[str, str] = dict()
         self.sender_id_2_umo: Dict[str, str] = dict()
+        self._shutdown_event: asyncio.Event | None = None
 
         self.init_before_request()
         self.init_routes()
@@ -225,6 +226,18 @@ class WebUIServer:
             return api_success(message="任务已删除")
 
     # --- Server lifecycle ---
+    def request_shutdown(self):
+        """
+        触发 hypercorn 的 shutdown_trigger，等待存量连接处理完后退出。
+        """
+        if self._shutdown_event:
+            self._shutdown_event.set()
+
+    def clear_sessions(self):
+        """清空已下发的登录密钥与会话绑定。"""
+        self.login_keys.clear()
+        self.sender_id_2_umo.clear()
+
     async def start_server(self, port: int = 5001):
         self.app.secret_key = secrets.token_urlsafe(32)  # 听说是用于session加密的密钥
 
@@ -234,7 +247,15 @@ class WebUIServer:
 
         # Provide a shutdown trigger so hypercorn skips its signal-handler
         # setup, which crashes in a non-main thread on Windows.
-        shutdown_event = asyncio.Event()
-        await hypercorn.asyncio.serve(
-            self.app, hypercorn_config, shutdown_trigger=shutdown_event.wait
-        )
+        self._shutdown_event = asyncio.Event()
+        try:
+            await hypercorn.asyncio.serve(
+                self.app, hypercorn_config, shutdown_trigger=self._shutdown_event.wait
+            )
+        except asyncio.CancelledError:
+            logger.info("WebUI server task 被取消")
+            raise
+        except Exception:
+            logger.exception("WebUI server 运行异常")
+        finally:
+            self._shutdown_event = None

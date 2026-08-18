@@ -37,9 +37,7 @@ class ListReminderPlugin(Star):
         self.server = WebUIServer(self.todo_manager)
         self.webui_port = self.config.get("webui_port", 5001)
         self.public_ip = (self.config.get("webui_public_ip") or "").strip()
-        self.webui_task: asyncio.Task = asyncio.create_task(
-            self.server.start_server(self.webui_port)
-        )
+        self.webui_task: asyncio.Task | None = None
 
     async def initialize(self):
         """插件初始化"""
@@ -51,7 +49,9 @@ class ListReminderPlugin(Star):
         # 取消正在运行的实例
         if self.webui_task and not self.webui_task.done():
             self.webui_task.cancel()
-        logger.info("现有实例已关闭，正在重新启动新实例……")
+            logger.info("现有实例已关闭，正在重新启动新实例……")
+        else:
+            logger.info("没有正在运行的实例，正在启动新实例……")
         self.webui_task = asyncio.create_task(self.server.start_server(self.webui_port))
         logger.info("新实例已启动")
 
@@ -61,15 +61,27 @@ class ListReminderPlugin(Star):
         - 列表
         - 清空
         - 后台
-        - 重启后台
+        - 关闭后台
         """
         pass
 
-    @reminder_commands.command("重启后台")
-    async def restart_webui(self, event: AstrMessageEvent):
-        """重启后台管理界面"""
-        self.__restart_webui()
-        yield event.plain_result("✅ 后台已重启")
+    @reminder_commands.command("关闭后台")
+    async def close_webui(self, event: AstrMessageEvent):
+        """关闭后台管理界面"""
+        if self.webui_task and not self.webui_task.done():
+            # 请求优雅关闭，并等待服务真正退出（端口释放）再提示
+            self.server.request_shutdown()
+            try:
+                await self.webui_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"关闭后台出错: {e}")
+            self.server.clear_sessions()
+            self.webui_task = None
+            yield event.plain_result("✅ 后台已关闭")
+        else:
+            yield event.plain_result("⚠️ 后台当前未运行")
 
     @reminder_commands.command("列表")
     async def list_todos(self, event: AstrMessageEvent):
@@ -101,6 +113,12 @@ class ListReminderPlugin(Star):
         - 启动协程，Host前端给用户访问
         - 为当前用户分配新的个人密钥，并注册到`LOGIN_KEYS`，以供登陆验证用
         """
+
+        # 后台未运行时启动服务
+        if self.webui_task is None or self.webui_task.done():
+            self.webui_task = asyncio.create_task(
+                self.server.start_server(self.webui_port)
+            )
 
         # 识别当前用户？
         sender_id = event.get_sender_id()
