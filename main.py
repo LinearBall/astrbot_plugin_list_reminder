@@ -11,7 +11,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from . import webui
-from .task_manager_new import TaskManagerNew
+from .todo_manager import TodoManager
 
 # from astrbot.core.message.message_event_result import MessageChain
 
@@ -31,15 +31,14 @@ class ListReminderPlugin(Star):
     def __init__(self, context: Context, config: ReminderConfig):
         super().__init__(context)
         self.config = config or {}
-        # self.task_manager = TaskManager(USERS_DIR, GROUPS_DIR, self.context)
-        self.task_manager_new = TaskManagerNew(self.context)
+        self.todo_manager = TodoManager(self.context)
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.llm_provider_id = self.config.get("llm_provider_id")
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
 
         # 设置task_manager引用到webui
-        webui.set_task_manager(self.task_manager_new)
+        webui.set_task_manager(self.todo_manager)
 
         # WebUI
         self.webui_task: asyncio.Task | None = None
@@ -49,7 +48,7 @@ class ListReminderPlugin(Star):
     async def initialize(self):
         """插件初始化"""
         logger.info("ListReminderPlugin 正在加载...")
-        await self.task_manager_new.count_down_for_pending_tasks_immediately()
+        await self.todo_manager.count_down_for_pending_tasks_immediately()
         logger.info("ListReminderPlugin 加载完成")
 
     def __restart_webui(self):
@@ -58,7 +57,7 @@ class ListReminderPlugin(Star):
             self.webui_task.cancel()
         logger.info("现有实例已关闭，正在重新启动新实例……")
         self.webui_task = asyncio.create_task(
-            webui.start_server(self.config, self.task_manager_new)
+            webui.start_server(self.config, self.todo_manager)
         )
         logger.info("新实例已启动")
 
@@ -82,7 +81,7 @@ class ListReminderPlugin(Star):
     async def list_tasks(self, event: AstrMessageEvent):
         """列出任务"""
         sender_id = event.get_sender_id()
-        tasks = self.task_manager_new.get_tasks_by_creator(sender_id)
+        tasks = self.todo_manager.get_tasks_by_creator(sender_id)
 
         if not tasks:
             yield event.plain_result("📝 您当前没有待办任务")
@@ -98,7 +97,7 @@ class ListReminderPlugin(Star):
     async def clear_tasks(self, event: AstrMessageEvent):
         """清空所有任务"""
         sender_id = event.get_sender_id()
-        self.task_manager_new.clear_tasks_by_sender_id(sender_id)
+        self.todo_manager.clear_tasks_by_sender_id(sender_id)
         yield event.plain_result("🗑️ 任务列表已清空")
 
     @reminder_commands.command("后台")
@@ -140,7 +139,7 @@ class ListReminderPlugin(Star):
 
         # 创建任务
         due_timestamp = datetime.fromisoformat(task_info["time"])
-        task_id = self.task_manager_new.create_task(
+        task_id = self.todo_manager.create_task(
             creator=sender_id,
             umo=umo,
             content=task_info["content"],

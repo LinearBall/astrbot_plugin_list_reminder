@@ -4,5 +4,7 @@
     ],
     "python.autoComplete.extraPaths": [
         "../../.."
-    ]
+    ],
+    "trae.tab.enableRename": false,
+    "trae.tab.enableAutoImport": false
 }

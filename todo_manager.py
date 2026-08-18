@@ -9,7 +9,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from .db import Task, TaskDB
 
 
-class TaskManagerNew:
+class TodoManager:
     """任务管理器 - 极简实现"""
 
     def __init__(self, context: Context):
@@ -17,7 +17,14 @@ class TaskManagerNew:
         self.db = TaskDB()
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
 
-    def create_task(self, creator: str, umo: str, content: str, due_time: float, completed: bool = False) -> int:
+    def create_task(
+        self,
+        creator: str,
+        umo: str,
+        content: str,
+        due_time: float,
+        completed: bool = False,
+    ) -> int:
         """
         创建一个新任务，并开始倒计时。若创建失败，则返回-1
         """
@@ -29,7 +36,9 @@ class TaskManagerNew:
             return new_task_id
         return -1
 
-    def update_task(self, task_id: int, content: str, due_time: int, completed: bool) -> int:
+    def update_task(
+        self, task_id: int, content: str, due_time: int, completed: bool
+    ) -> int:
         # todo: 统一使用EditPayload
         """
         更新任务内容与到期时间。

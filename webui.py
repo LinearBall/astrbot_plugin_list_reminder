@@ -20,12 +20,12 @@ from quart import (
 
 from .db import EditTaskPayload, Task
 from .shared_types import LoginPayload
-from .task_manager_new import TaskManagerNew
+from .todo_manager import TodoManager
 
 APP = Quart(__name__)
 DIST_DIR = Path(__file__).parent / "dist"
 # Runtime state, configured in start_server()
-TASK_MANAGER: TaskManagerNew | None = None
+TASK_MANAGER: TodoManager | None = None
 # Active per-user login keys. Format = {key: sender_id}
 LOGIN_KEYS: Dict[str, str] = dict()
 SENDER_ID2UMO: Dict[str, str] = dict()
