@@ -1,7 +1,6 @@
 ﻿import asyncio
 import json
 import re
-import urllib.request
 from datetime import datetime, timedelta
 from typing import TypedDict
 
@@ -37,6 +36,7 @@ class ListReminderPlugin(Star):
         # WebUI
         self.server = WebUIServer(self.todo_manager)
         self.webui_port = self.config.get("webui_port", 5001)
+        self.public_ip = (self.config.get("webui_public_ip") or "").strip()
         self.webui_task: asyncio.Task = asyncio.create_task(
             self.server.start_server(self.webui_port)
         )
@@ -108,9 +108,17 @@ class ListReminderPlugin(Star):
         key = self.server.issue_login_key(sender_id)
         self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
-        yield event.plain_result(
-            f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/login\n登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
+        msg = (
+            f"✅ 后台已就绪\n"
+            f"访问地址: http://localhost:{self.webui_port}/login\n"
         )
+        if self.public_ip:
+            msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/login\n"
+        else:
+            msg += "⚠️ 未配置公网地址，外网无法访问后台\n"
+        msg += f"登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
+
+        yield event.plain_result(msg)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
