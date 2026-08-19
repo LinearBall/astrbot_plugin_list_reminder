@@ -9,7 +9,7 @@ from astrbot.api import logger
 from hypercorn.config import Config
 from quart import Quart, jsonify, request, send_from_directory, session
 
-from .db import EditTodoPayload, Todo
+from .db_utils import EditTodoPayload, Todo
 from .shared_types import LoginPayload
 from .todo_manager import TodoManager
 
