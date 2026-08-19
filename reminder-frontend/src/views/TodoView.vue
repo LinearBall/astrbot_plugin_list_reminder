@@ -8,7 +8,7 @@ import { LogOutFilled, PlusFilled, RefreshFilled } from "@vicons/material";
 import { NButton, NButtonGroup, NCard, NCheckbox, NIcon, NList, NListItem, NText, useMessage } from "naive-ui";
 // 自定义机能
 import EditTodoModal from '@/components/EditTodoModal.vue';
-import { checkIfAlreadyLoggedIn, delTodoById, getTodos, logout, updateTodoById } from '@/fbApi/apis.ts';
+import { checkIfAlreadyLoggedIn, delTodoById, getTodos, logout, toggleAdmin, updateTodoById } from '@/fbApi/apis.ts';
 import type { EditTodoPayload, Todo } from '@/types.ts';
 
 const router = useRouter()
@@ -17,6 +17,7 @@ const message = useMessage();
 const todos = ref<Todo[]>([])
 const showEditModal = ref(false)
 const editingTodo = ref<Todo | null>(null)
+const isAdmin = ref(false)
 
 async function handleLogout() {
   logout().then(() => {
@@ -96,12 +97,30 @@ async function handleCompletionStatus(curTodo: Todo) {
   });
 }
 
+async function handleToggleAdmin() {
+  toggleAdmin()
+    .then((res) => {
+      if (res.code === 200) {
+        isAdmin.value = !!res.payload["is_admin"];
+        message.success(res.payload["message"]);
+        refreshTodos();
+      } else {
+        message.error(res.payload["message"] || "操作失败");
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      message.error("操作失败，请稍后重试");
+    });
+}
+
 onMounted(async () => {
   // 检查是否已登录，若否，则跳转到登录页
-  let isAlready = await checkIfAlreadyLoggedIn();
-  if (isAlready === null) {
+  let me = await checkIfAlreadyLoggedIn();
+  if (me === null) {
     router.push("/login");  // * 通过这个实现跳转
   }
+  isAdmin.value = me ? me.is_admin : false;
   refreshTodos();
 });
 </script>
@@ -115,23 +134,28 @@ onMounted(async () => {
             <span class="todo-title">我的待办事项</span>
             <span class="todo-count">{{ todos.length }} 项待办</span>
           </div>
-          <n-button-group>
-            <n-button ghost :bordered="false" type="primary" @click="openEditModal(null)">
-              <n-icon>
-                <PlusFilled />
-              </n-icon>
+          <div class="todo-actions">
+            <n-button ghost :bordered="false" :type="isAdmin ? 'warning' : 'primary'" @click="handleToggleAdmin">
+              {{ isAdmin ? '关闭管理员权限' : '开启管理员权限' }}
             </n-button>
-            <n-button ghost :bordered="false" type="primary" @click="refreshTodos">
-              <n-icon>
-                <RefreshFilled />
-              </n-icon>
-            </n-button>
-            <n-button ghost :bordered="false" type="error" @click="handleLogout">
-              <n-icon>
-                <LogOutFilled />
-              </n-icon>
-            </n-button>
-          </n-button-group>
+            <n-button-group>
+              <n-button ghost :bordered="false" type="primary" @click="openEditModal(null)">
+                <n-icon>
+                  <PlusFilled />
+                </n-icon>
+              </n-button>
+              <n-button ghost :bordered="false" type="primary" @click="refreshTodos">
+                <n-icon>
+                  <RefreshFilled />
+                </n-icon>
+              </n-button>
+              <n-button ghost :bordered="false" type="error" @click="handleLogout">
+                <n-icon>
+                  <LogOutFilled />
+                </n-icon>
+              </n-button>
+            </n-button-group>
+          </div>
         </div>
       </template>
 
@@ -192,6 +216,14 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
 }
+
+.todo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
 
 .todo-title {
   font-size: 18px;

@@ -10,19 +10,47 @@ const http = axios.create({
 });
 
 /**
- * 通过访问`/api/me`接口，检查用户是否已登录
- * 
- * @returns 已登录的用户ID(后端的sender_id)，若未登录则返回null
+ * 方案A：每个标签页从自己的 URL 查询参数里取登录密钥，
+ * 并在后续每个请求头里携带 `X-Auth-Key`，从而同一台电脑上能同时打开多个账号的后台。
  */
-async function checkIfAlreadyLoggedIn(): Promise<string | null> {
+let authKey: string | null = new URLSearchParams(window.location.search).get("key");
+
+http.interceptors.request.use((config) => {
+    if (authKey) {
+        config.headers.set("X-Auth-Key", authKey);
+    }
+    return config;
+});
+
+export function setAuthKey(key: string | null): void {
+    authKey = key;
+}
+
+export function getAuthKey(): string | null {
+    return authKey;
+}
+
+interface Me {
+    sender_id: string;
+    is_admin: boolean;
+}
+
+/**
+ * 通过访问`/api/me`接口，检查用户是否已登录
+ *
+ * @returns 已登录的用户信息，若未登录则返回null
+ */
+async function checkIfAlreadyLoggedIn(): Promise<Me | null> {
     let resp = await http.get<ApiResp>("/api/me");
     let data = resp.data as ApiResp;
-    return data.code === 200 ? data["payload"]["sender_id"] as string : null;
+    return data.code === 200
+        ? { sender_id: data["payload"]["sender_id"] as string, is_admin: !!data["payload"]["is_admin"] }
+        : null;
 }
 
 /**
  * 通过访问`/api/login`接口，检查密钥是否正确
- * 
+ *
  * @param key 密钥
  * @returns 密钥是否正确
  */
@@ -31,7 +59,7 @@ async function checkKey(key: string): Promise<boolean> {
         key: key
     });
     let data = resp.data as ApiResp;
-    return Promise.resolve(data.code === 200);
+    return data.code === 200;
 }
 
 /**
@@ -39,10 +67,11 @@ async function checkKey(key: string): Promise<boolean> {
  */
 async function logout(): Promise<void> {
     await http.post<ApiResp>("/api/logout");
+    setAuthKey(null);
 }
 
 /**
- * 取得当前用户创建的所有待办
+ * 取得当前用户可见的所有待办
  */
 async function getTodos(): Promise<Todo[]> {
     let resp = await http.get<ApiResp>("/api/todos");
@@ -67,4 +96,12 @@ async function updateTodoById(payload: EditTodoPayload) {
     }).then(res => res.data as ApiResp);
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById }
+/**
+ * 切换当前用户的管理员权限（开启 / 关闭）
+ */
+async function toggleAdmin(): Promise<ApiResp> {
+    let resp = await http.post<ApiResp>("/api/admin/toggle");
+    return resp.data as ApiResp;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin }

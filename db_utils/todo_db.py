@@ -92,6 +92,17 @@ class TodoDB:
             logger.info(row)
         return [Todo.from_db_row(row) for row in rows]
 
+    def get_all_todos(self) -> List[Todo]:
+        """获取所有用户创建的所有待办。"""
+        with self.dbm.get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("select * from Todos")
+        rows: List[s3.Row] = cursor.fetchall()
+        todos = [Todo.from_db_row(row) for row in rows]
+        for todo in todos:
+            todo.tags = self.get_tags_by_todo(todo.todo_id)
+        return todos
+
     def get_todo_by_creator(self, creator: str) -> List[Todo]:
         """
         获取指定用户创建的所有待办

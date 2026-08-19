@@ -34,8 +34,18 @@ class ListReminderPlugin(Star):
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
+
+        # 管理员 sender_id 列表（后台开启管理员权限的按钮据此判断）
+        raw_admins = self.config.get("admin_sender_ids") or []
+        if isinstance(raw_admins, str):
+            raw_admins = [
+                s.strip() for s in raw_admins.replace("，", ",").split(",") if s.strip()
+            ]
+        self._admin_sender_ids: set[str] = {
+            str(s).strip() for s in raw_admins if str(s).strip()
+        }
         # WebUI
-        self.server = WebUIServer(self.todo_manager)
+        self.server = WebUIServer(self.todo_manager, self._admin_sender_ids)
         self.webui_port = self.config.get("webui_port", 5001)
         self.public_ip = (self.config.get("webui_public_ip") or "").strip()
         self.webui_task: asyncio.Task | None = None
@@ -62,6 +72,7 @@ class ListReminderPlugin(Star):
     @filter.command_group("列表提醒")
     def reminder_commands(self):
         """列表提醒命令组
+        - 初始化
         - 列表
         - 清空
         - 后台
@@ -130,14 +141,28 @@ class ListReminderPlugin(Star):
         key = self.server.issue_login_key(sender_id)
         self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
-        msg = f"✅ 后台已就绪\n" f"访问地址: http://localhost:{self.webui_port}/login\n"
+        msg = f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/?key={key}\n"
         if self.public_ip:
-            msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/login\n"
+            msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/?key={key}\n"
         else:
             msg += "⚠️ 未配置公网地址，外网无法访问后台\n"
-        msg += f"登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
+        msg += "（每个账号都有独立的专属地址，请妥善保管，勿分享他人）"
 
         yield event.plain_result(msg)
+
+    @reminder_commands.command("初始化")
+    async def initialize_user(self, event: AstrMessageEvent):
+        """在用户数据库登记当前用户，并记录私聊会话（仅限私聊）。"""
+        group_id = event.get_group_id()
+        if group_id:
+            yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
+            return
+        sender_id = event.get_sender_id()
+        umo = event.unified_msg_origin
+        existing = self.todo_manager.user_db.get_user(sender_id)
+        is_admin = bool(existing and existing.is_admin)
+        self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
+        yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):

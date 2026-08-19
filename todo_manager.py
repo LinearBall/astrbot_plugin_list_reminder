@@ -156,6 +156,10 @@ class TodoManager:
             del self.active_timers[each.todo_id]
         self.db.delete_todos_by_umo(umo)
 
+    def get_all_todos(self) -> List[Todo]:
+        """获取所有用户创建的所有任务。"""
+        return self.db.get_all_todos()
+
     def get_todos_by_creator(self, creator: str) -> List[Todo]:
         """
         获取指定用户创建的所有任务

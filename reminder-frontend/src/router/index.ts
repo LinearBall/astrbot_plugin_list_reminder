@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import LoginView from '../views/LoginView.vue'
 import TodoView from '../views/TodoView.vue'
+import { getAuthKey } from '@/fbApi/apis'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,6 +23,16 @@ const router = createRouter({
       redirect: '/login',
     },
   ],
+})
+
+// 方案A：把当前标签页的登录密钥保留在 URL query 上，
+// 这样同一浏览器里每个标签页都能持有自己的账号身份。
+router.beforeEach((to) => {
+  const key = getAuthKey();
+  if (key && !to.query.key) {
+    return { path: to.path, query: { ...to.query, key } };
+  }
+  return true;
 })
 
 export default router

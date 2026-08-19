@@ -33,8 +33,9 @@ def api_error(code: int, message: str, **extra):
 
 
 class WebUIServer:
-    def __init__(self, tm: TodoManager) -> None:
+    def __init__(self, tm: TodoManager, admin_sender_ids: set[str] | None = None) -> None:
         self.tm = tm
+        self.admin_sender_ids = set(admin_sender_ids or [])
         self.app = Quart(__name__)
         self.login_keys: Dict[str, str] = dict()
         self.sender_id_2_umo: Dict[str, str] = dict()
@@ -78,12 +79,44 @@ class WebUIServer:
             return None
         return self.login_keys[key]
 
+    def _request_auth_key(self) -> str:
+        """读取请求头中的登录密钥（方案A：每个标签页携带自己的 key）。"""
+        return (request.headers.get("X-Auth-Key") or "").strip()
+
+    def current_request_sender_id(self) -> str | None:
+        """优先用请求头 key 识别身份，其次回退到 session 登录态。
+
+        Returns:
+            当前请求对应的 sender_id；未登录返回 None。
+        """
+        key = self._request_auth_key()
+        if key and key in self.login_keys:
+            return self.login_keys[key]
+        return self.current_session_sender_id()
+
+    def is_admin_user(self, sender_id: str) -> bool:
+        """判断指定用户在 userDB 中是否为管理员。
+
+        Args:
+            sender_id: 用户 sender_id。
+
+        Returns:
+            是否为管理员。
+        """
+        user = self.tm.user_db.get_user(sender_id) if self.tm else None
+        return bool(user and user.is_admin)
+
+    def current_request_is_admin(self) -> bool:
+        """当前请求的用户在 userDB 中是否为管理员。"""
+        sender_id = self.current_request_sender_id()
+        return bool(sender_id) and self.is_admin_user(sender_id)
+
     # --- Auth ---
     def init_before_request(self):
         @self.app.before_request
         async def check_if_logged_in():
             # 1. 允许放行已有登录会话的用户
-            if self.current_session_sender_id():
+            if self.current_request_sender_id():
                 return None
             # 2. 区分api访问和原版访问
             if request.path.startswith("/api/"):
@@ -118,7 +151,7 @@ class WebUIServer:
 
         @self.app.route("/api/login", methods=["POST"])
         async def api_login():
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if sender_id:
                 return api_success(message="已登录", sender_id=sender_id)
 
@@ -141,10 +174,10 @@ class WebUIServer:
         async def api_me():
             """
             通过确定当前session中记录的`login_key`，来确认当前登陆的用户（sender_id）是谁"""
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
-            return api_success(sender_id=sender_id)
+            return api_success(sender_id=sender_id, is_admin=self.is_admin_user(sender_id))
 
         @self.app.route("/api/todos", methods=["GET"])
         async def list_todos():
@@ -152,16 +185,19 @@ class WebUIServer:
             获取当前登陆用户的所有任务。
             任务按到期时间排序，最早到期在前。
             """
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
-            todos: List[Todo] = self.tm.db.get_todo_by_creator(sender_id)
+            if self.current_request_is_admin():
+                todos: List[Todo] = self.tm.get_all_todos()
+            else:
+                todos = self.tm.get_todos_by_creator(sender_id)
             todos.sort(key=lambda t: t.due_time)
             return api_success(todos=[t.model_dump() for t in todos])
 
         @self.app.route("/api/todos", methods=["POST"])
         async def create_todo():
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
@@ -189,7 +225,7 @@ class WebUIServer:
 
         @self.app.route("/api/todos/<int:todo_id>", methods=["PUT"])
         async def update_todo(todo_id):
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
@@ -201,7 +237,7 @@ class WebUIServer:
                 return api_error(400, "内容、到期时间不能为空")
 
             todo = self.tm.db.get_todo_by_id(todo_id)
-            if not todo or todo.creator != sender_id:
+            if not todo or (todo.creator != sender_id and not self.current_request_is_admin()):
                 return api_error(404, "任务未找到或无权限")
             updated_todo_id = self.tm.update_todo(todo_id, content, due_time, completed)
             if updated_todo_id == -1:
@@ -211,12 +247,12 @@ class WebUIServer:
 
         @self.app.route("/api/todos/<int:todo_id>", methods=["DELETE"])
         async def delete_todo(todo_id):
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
             todo = self.tm.db.get_todo_by_id(todo_id)
-            if not todo or todo.creator != sender_id:
+            if not todo or (todo.creator != sender_id and not self.current_request_is_admin()):
                 return api_error(404, "任务未找到或无权限")
 
             self.tm.db.delete_todo(todo_id)
@@ -224,6 +260,22 @@ class WebUIServer:
             if timer and not timer.done():
                 timer.cancel()
             return api_success(message="任务已删除")
+
+        @self.app.route("/api/admin/toggle", methods=["POST"])
+        async def toggle_admin():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            user = self.tm.user_db.get_user(sender_id)
+            current_admin = bool(user and user.is_admin)
+            umo = getattr(user, "umo_of_bot", "") or self.sender_id_2_umo.get(sender_id, "")
+            if current_admin:
+                self.tm.user_db.add_or_update_user(sender_id, umo, is_admin=False)
+                return api_success(is_admin=False, message="已关闭管理员权限")
+            if sender_id in self.admin_sender_ids:
+                self.tm.user_db.add_or_update_user(sender_id, umo, is_admin=True)
+                return api_success(is_admin=True, message="已开启管理员权限")
+            return api_error(403, "您不是管理员，无法开启管理员权限")
 
     # --- Server lifecycle ---
     def request_shutdown(self):
