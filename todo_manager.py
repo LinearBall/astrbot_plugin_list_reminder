@@ -6,7 +6,7 @@ from venv import logger
 from astrbot.api.star import Context
 from astrbot.core.message.message_event_result import MessageChain
 
-from .db import TagDB, Todo, TodoDB, UserDB
+from .db_utils import DBManager, TagDB, Todo, TodoDB, UserDB
 
 
 def get_delay(due_time: float):
@@ -22,10 +22,14 @@ class TodoManager:
 
     def __init__(self, context: Context):
         self.context = context
-        self.db = TodoDB()
-        self.user_db = UserDB(self.db)
-        self.tag_db = TagDB(self.db)
+        self.dbm = DBManager()
+        self.db = TodoDB(self.dbm)
+        self.user_db = UserDB(self.dbm)
+        self.tag_db = TagDB(self.dbm)
         self.active_timers: Dict[int, asyncio.Task] = {}  # 只存活跃定时器
+
+    def __del__(self):
+        self.dbm.close()
 
     def create_todo(
         self,
@@ -150,7 +154,7 @@ class TodoManager:
         todos_to_clear = self.get_todos_by_umo(umo)
         for each in todos_to_clear:
             del self.active_timers[each.todo_id]
-        self.db.clear_todos_by_umo(umo)
+        self.db.delete_todos_by_umo(umo)
 
     def get_todos_by_creator(self, creator: str) -> List[Todo]:
         """
@@ -165,4 +169,4 @@ class TodoManager:
         tasks_to_clear = self.get_todos_by_creator(sender_id)
         for task in tasks_to_clear:
             del self.active_timers[task.todo_id]
-        self.db.clear_todos_by_sender_id(sender_id)
+        self.db.delete_todos_by_sender_id(sender_id)

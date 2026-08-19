@@ -1,0 +1,55 @@
+import sqlite3 as s3
+from datetime import datetime
+from typing import List, TypedDict
+
+from pydantic import BaseModel
+
+
+class Todo(BaseModel):
+    todo_id: int
+    creator: str
+    umo: str
+    content: str
+    due_time: int
+    completed: bool
+    tags: List[str] = []
+
+    @staticmethod
+    def from_db_row(row: s3.Row) -> "Todo":
+        return Todo(
+            todo_id=row[0],
+            creator=row[1],
+            umo=row[2],
+            content=row[3],
+            due_time=row[4],
+            completed=row[5],
+        )
+
+    def to_friendly(self) -> str:
+        frdly_status = "✅" if self.completed else "⏰"
+        frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
+        tag_hint = (" #" + " #".join(self.tags)) if self.tags else ""
+        return "{} [{}] {}{}".format(
+            frdly_status, frdly_due_time, self.content, tag_hint
+        )
+
+
+class EditTodoPayload(TypedDict):
+    todo_id: int
+    content: str
+    due_time: int
+    completed: bool
+
+
+class User(BaseModel):
+    sender_id: str
+    umo: str
+    is_admin: bool
+
+    @staticmethod
+    def from_db_row(row: s3.Row) -> "User":
+        return User(
+            sender_id=row[0],
+            umo=row[1],
+            is_admin=bool(row[2]),
+        )

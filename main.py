@@ -4,15 +4,16 @@ import re
 from datetime import datetime, timedelta
 from typing import TypedDict
 
-from dateutil import parser as dateutil_parser
-
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
+from dateutil import parser as dateutil_parser
+
+from .consts import PLUGIN_DATA_ROOT
+from .todo_manager import TodoManager
 
 # from . import webui
 from .webui_new import WebUIServer
-from .todo_manager import TodoManager
 
 
 class ReminderConfig(TypedDict):
@@ -43,6 +44,9 @@ class ListReminderPlugin(Star):
         """插件初始化"""
         logger.info("ListReminderPlugin 正在加载...")
         await self.todo_manager.count_down_for_pending_todos_immediately()
+        # 确保目录存在
+        PLUGIN_DATA_ROOT.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Data path: {PLUGIN_DATA_ROOT}")
         logger.info("ListReminderPlugin 加载完成")
 
     def __restart_webui(self):
@@ -126,10 +130,7 @@ class ListReminderPlugin(Star):
         key = self.server.issue_login_key(sender_id)
         self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
-        msg = (
-            f"✅ 后台已就绪\n"
-            f"访问地址: http://localhost:{self.webui_port}/login\n"
-        )
+        msg = f"✅ 后台已就绪\n" f"访问地址: http://localhost:{self.webui_port}/login\n"
         if self.public_ip:
             msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/login\n"
         else:
@@ -327,4 +328,3 @@ class ListReminderPlugin(Star):
         except Exception as e:
             logger.error(f"提取任务失败: {e}")
             return None
-
