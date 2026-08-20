@@ -59,16 +59,6 @@ class ListReminderPlugin(Star):
         logger.info(f"Data path: {PLUGIN_DATA_ROOT}")
         logger.info("ListReminderPlugin 加载完成")
 
-    def __restart_webui(self):
-        # 取消正在运行的实例
-        if self.webui_task and not self.webui_task.done():
-            self.webui_task.cancel()
-            logger.info("现有实例已关闭，正在重新启动新实例……")
-        else:
-            logger.info("没有正在运行的实例，正在启动新实例……")
-        self.webui_task = asyncio.create_task(self.server.start_server(self.webui_port))
-        logger.info("新实例已启动")
-
     @filter.command_group("列表提醒")
     def reminder_commands(self):
         """列表提醒命令组
@@ -79,6 +69,20 @@ class ListReminderPlugin(Star):
         - 关闭后台
         """
         pass
+
+    @reminder_commands.command("初始化")
+    async def initialize_user(self, event: AstrMessageEvent):
+        """在用户数据库登记当前用户，并记录私聊会话（仅限私聊）。"""
+        group_id = event.get_group_id()
+        if group_id:
+            yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
+            return
+        sender_id = event.get_sender_id()
+        umo = event.unified_msg_origin
+        existing = self.todo_manager.user_db.get_user(sender_id)
+        is_admin = bool(existing and existing.is_admin)
+        self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
+        yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
 
     @reminder_commands.command("关闭后台")
     async def close_webui(self, event: AstrMessageEvent):
@@ -150,26 +154,14 @@ class ListReminderPlugin(Star):
 
         yield event.plain_result(msg)
 
-    @reminder_commands.command("初始化")
-    async def initialize_user(self, event: AstrMessageEvent):
-        """在用户数据库登记当前用户，并记录私聊会话（仅限私聊）。"""
-        group_id = event.get_group_id()
-        if group_id:
-            yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
-            return
-        sender_id = event.get_sender_id()
-        umo = event.unified_msg_origin
-        existing = self.todo_manager.user_db.get_user(sender_id)
-        is_admin = bool(existing and existing.is_admin)
-        self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
-        yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
-
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """ALL监听所有消息，智能识别任务需求"""
         msg = event.message_str
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
+        group_id = event.get_group_id()
+        yield event.plain_result(f"收到消息：{msg}，来自 sender_id: {sender_id}, group_id: {group_id}, umo: {umo}")
 
         # 使用LLM判断是否为提醒意图
         if not await self._is_reminder_intent(msg, event):

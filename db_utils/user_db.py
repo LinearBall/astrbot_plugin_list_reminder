@@ -72,3 +72,16 @@ class UserDB:
             )
             rows = cursor.fetchall()
         return [User.from_db_row(row) for row in rows]
+
+
+    def list_users(self) -> List[User]:
+        """列出所有用户。
+
+        Returns:
+            全部用户列表。
+        """
+        with self.dbm.get_conn() as conn:
+            rows = conn.execute(
+                "SELECT sender_id, umo_of_bot, is_admin FROM Users ORDER BY sender_id"
+            ).fetchall()
+        return [User.from_db_row(row) for row in rows]

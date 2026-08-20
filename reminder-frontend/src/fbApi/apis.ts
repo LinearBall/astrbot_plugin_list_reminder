@@ -1,4 +1,4 @@
-import type { ApiResp, EditTodoPayload, Todo } from "@/types.ts";
+import type { ApiResp, EditTodoPayload, TagCatalogue, Todo } from "@/types.ts";
 import axios from "axios";
 
 /**
@@ -104,4 +104,33 @@ async function toggleAdmin(): Promise<ApiResp> {
     return resp.data as ApiResp;
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin }
+/**
+ * 获取当前用户可见的标签目录（管理员看到全部用户，普通用户只看到自己）
+ */
+async function getTagCatalogue(): Promise<TagCatalogue> {
+    let resp = await http.get<ApiResp>("/api/tags");
+    let data = resp.data as ApiResp;
+    return data.code === 200 ? data["payload"] as TagCatalogue : { is_admin: false, users: [], tag_senders: {} };
+}
+
+/**
+ * 给指定用户添加一个标签（普通用户只能操作自己，管理员可操作任意用户）
+ * @param senderId 目标用户 sender_id
+ * @param tag 要添加的标签名
+ */
+async function addUserTag(senderId: string, tag: string): Promise<ApiResp> {
+    let resp = await http.post<ApiResp>("/api/tags", { tag: tag, sender_id: senderId });
+    return resp.data as ApiResp;
+}
+
+/**
+ * 给指定用户移除一个标签
+ * @param senderId 目标用户 sender_id
+ * @param tag 要移除的标签名
+ */
+async function removeUserTag(senderId: string, tag: string): Promise<ApiResp> {
+    let resp = await http.delete<ApiResp>("/api/tags", { data: { tag: tag, sender_id: senderId } });
+    return resp.data as ApiResp;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin, getTagCatalogue, addUserTag, removeUserTag }

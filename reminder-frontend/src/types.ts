@@ -5,6 +5,7 @@ export interface Todo {
     content: string
     due_time: number
     completed: boolean
+    tags: string[]
 }
 
 export interface EditTodoPayload {
@@ -12,9 +13,24 @@ export interface EditTodoPayload {
     content: string
     due_time: number
     completed: boolean
+    owners?: string[]
+    tags?: string[]
 }
 
 export interface ApiResp {
     code: number,
     payload: Record<string, any>
+}
+
+export interface TagUser {
+    sender_id: string
+    umo: string
+    is_admin: boolean
+    tags: string[]
+}
+
+export interface TagCatalogue {
+    is_admin: boolean
+    users: TagUser[]
+    tag_senders: Record<string, string[]>
 }
