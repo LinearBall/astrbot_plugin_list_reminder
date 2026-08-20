@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS Todos (
 CREATE TABLE IF NOT EXISTS Users (
     sender_id TEXT PRIMARY KEY,
     umo_of_bot TEXT NOT NULL,
-    is_admin INTEGER DEFAULT 0
+    is_admin INTEGER DEFAULT 0,
+    nickname TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS Tags (
     tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,3 +64,10 @@ class DBManager:
     def init_db(self):
         with self.get_conn() as conn:
             conn.executescript(SQL_CREATE_TABLES)
+            # 迁移：为旧版本 users 表补充 nickname 字段，并把已有用户昵称回填为 sender_id
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(Users)").fetchall()}
+            if "nickname" not in cols:
+                conn.execute("ALTER TABLE Users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''")
+            conn.execute(
+                "UPDATE Users SET nickname = sender_id WHERE nickname IS NULL OR nickname = ''"
+            )

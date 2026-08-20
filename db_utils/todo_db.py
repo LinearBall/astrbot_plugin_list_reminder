@@ -92,6 +92,17 @@ class TodoDB:
             logger.info(row)
         return [Todo.from_db_row(row) for row in rows]
 
+    def get_all_todos(self) -> List[Todo]:
+        """获取所有用户创建的所有待办。"""
+        with self.dbm.get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("select * from Todos")
+        rows: List[s3.Row] = cursor.fetchall()
+        todos = [Todo.from_db_row(row) for row in rows]
+        for todo in todos:
+            todo.tags = self.get_tags_by_todo(todo.todo_id)
+        return todos
+
     def get_todo_by_creator(self, creator: str) -> List[Todo]:
         """
         获取指定用户创建的所有待办
@@ -145,6 +156,24 @@ class TodoDB:
                 (content, due_time, int(completed), todo_id),
             )
             return cursor.rowcount > 0
+
+    def update_todo_owner(self, todo_id: int, creator: str, umo: str) -> bool:
+        """Update a todo owner and its reminder session.
+
+        Args:
+            todo_id: Todo ID.
+            creator: New owner sender ID.
+            umo: New owner reminder session.
+
+        Returns:
+            Whether a row was updated.
+        """
+        with self.dbm.get_conn() as conn:
+            cur = conn.execute(
+                "update Todos set creator = ?, umo = ? where todo_id = ?",
+                (creator, umo, todo_id),
+            )
+            return cur.rowcount > 0
 
     def delete_todo(self, todo_id: int):
         """

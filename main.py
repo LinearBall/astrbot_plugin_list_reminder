@@ -34,8 +34,18 @@ class ListReminderPlugin(Star):
 
         self.max_tasks_per_user = self.config.get("max_tasks_per_user", 50)
         self.schedule_detection_provider_id = self.config.get("schedule_detection_llm")
+
+        # 管理员 sender_id 列表（后台开启管理员权限的按钮据此判断）
+        raw_admins = self.config.get("admin_sender_ids") or []
+        if isinstance(raw_admins, str):
+            raw_admins = [
+                s.strip() for s in raw_admins.replace("，", ",").split(",") if s.strip()
+            ]
+        self._admin_sender_ids: set[str] = {
+            str(s).strip() for s in raw_admins if str(s).strip()
+        }
         # WebUI
-        self.server = WebUIServer(self.todo_manager)
+        self.server = WebUIServer(self.todo_manager, self._admin_sender_ids)
         self.webui_port = self.config.get("webui_port", 5001)
         self.public_ip = (self.config.get("webui_public_ip") or "").strip()
         self.webui_task: asyncio.Task | None = None
@@ -49,25 +59,34 @@ class ListReminderPlugin(Star):
         logger.info(f"Data path: {PLUGIN_DATA_ROOT}")
         logger.info("ListReminderPlugin 加载完成")
 
-    def __restart_webui(self):
-        # 取消正在运行的实例
-        if self.webui_task and not self.webui_task.done():
-            self.webui_task.cancel()
-            logger.info("现有实例已关闭，正在重新启动新实例……")
-        else:
-            logger.info("没有正在运行的实例，正在启动新实例……")
-        self.webui_task = asyncio.create_task(self.server.start_server(self.webui_port))
-        logger.info("新实例已启动")
-
     @filter.command_group("列表提醒")
     def reminder_commands(self):
         """列表提醒命令组
+        - 初始化
         - 列表
         - 清空
         - 后台
         - 关闭后台
         """
         pass
+
+    @reminder_commands.command("初始化")
+    async def initialize_user(self, event: AstrMessageEvent):
+        """在用户数据库登记当前用户，并记录私聊会话，如果没有记录暂时使用群聊umo。"""
+        group_id = event.get_group_id()
+        sender_id = event.get_sender_id()
+        umo = event.unified_msg_origin
+        existing = self.todo_manager.user_db.get_user(sender_id)
+        is_admin = bool(existing and existing.is_admin)
+        if group_id:
+            if existing:
+                yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
+                return
+            else:
+                yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化，当前使用群聊会话umo作为临时记录")
+        else:
+            yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
+        self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
 
     @reminder_commands.command("关闭后台")
     async def close_webui(self, event: AstrMessageEvent):
@@ -130,12 +149,12 @@ class ListReminderPlugin(Star):
         key = self.server.issue_login_key(sender_id)
         self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
-        msg = f"✅ 后台已就绪\n" f"访问地址: http://localhost:{self.webui_port}/login\n"
+        msg = f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/?key={key}\n"
         if self.public_ip:
-            msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/login\n"
+            msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/?key={key}\n"
         else:
             msg += "⚠️ 未配置公网地址，外网无法访问后台\n"
-        msg += f"登录密钥: {key}\n（密钥仅您本人可用，只能看到自己的任务）"
+        msg += "（每个账号都有独立的专属地址，请妥善保管，勿分享他人）"
 
         yield event.plain_result(msg)
 
@@ -145,6 +164,8 @@ class ListReminderPlugin(Star):
         msg = event.message_str
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
+        # group_id = event.get_group_id()
+        # yield event.plain_result(f"收到消息：{msg}，来自 sender_id: {sender_id}, group_id: {group_id}, umo: {umo}")
 
         # 使用LLM判断是否为提醒意图
         if not await self._is_reminder_intent(msg, event):

@@ -33,8 +33,9 @@ def api_error(code: int, message: str, **extra):
 
 
 class WebUIServer:
-    def __init__(self, tm: TodoManager) -> None:
+    def __init__(self, tm: TodoManager, admin_sender_ids: set[str] | None = None) -> None:
         self.tm = tm
+        self.admin_sender_ids = set(admin_sender_ids or [])
         self.app = Quart(__name__)
         self.login_keys: Dict[str, str] = dict()
         self.sender_id_2_umo: Dict[str, str] = dict()
@@ -78,12 +79,63 @@ class WebUIServer:
             return None
         return self.login_keys[key]
 
+    def _request_auth_key(self) -> str:
+        """读取请求头中的登录密钥（方案A：每个标签页携带自己的 key）。"""
+        return (request.headers.get("X-Auth-Key") or "").strip()
+
+    def current_request_sender_id(self) -> str | None:
+        """优先用请求头 key 识别身份，其次回退到 session 登录态。
+
+        Returns:
+            当前请求对应的 sender_id；未登录返回 None。
+        """
+        key = self._request_auth_key()
+        if key and key in self.login_keys:
+            return self.login_keys[key]
+        return self.current_session_sender_id()
+
+    def is_admin_user(self, sender_id: str) -> bool:
+        """判断指定用户在 userDB 中是否为管理员。
+
+        Args:
+            sender_id: 用户 sender_id。
+
+        Returns:
+            是否为管理员。
+        """
+        user = self.tm.user_db.get_user(sender_id) if self.tm else None
+        return bool(user and user.is_admin)
+
+    def current_request_is_admin(self) -> bool:
+        """当前请求的用户在 userDB 中是否为管理员。"""
+        sender_id = self.current_request_sender_id()
+        return bool(sender_id) and self.is_admin_user(sender_id)
+
+    def _owner_umo(self, owner: str, current_sender: str) -> str:
+        """解析任务所有者的推送会话 umo。
+
+        Args:
+            owner: 任务所有者 sender_id。
+            current_sender: 当前登录用户 sender_id。
+
+        Returns:
+            推送使用的 umo 字符串；无法确定时返回空串。
+        """
+        if owner and owner == current_sender:
+            umo = self.sender_id_2_umo.get(owner, "")
+            if umo:
+                return umo
+        user = self.tm.user_db.get_user(owner) if self.tm else None
+        if user and (user.umo or "").strip():
+            return user.umo
+        return self.sender_id_2_umo.get(owner, "")
+
     # --- Auth ---
     def init_before_request(self):
         @self.app.before_request
         async def check_if_logged_in():
             # 1. 允许放行已有登录会话的用户
-            if self.current_session_sender_id():
+            if self.current_request_sender_id():
                 return None
             # 2. 区分api访问和原版访问
             if request.path.startswith("/api/"):
@@ -118,7 +170,7 @@ class WebUIServer:
 
         @self.app.route("/api/login", methods=["POST"])
         async def api_login():
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if sender_id:
                 return api_success(message="已登录", sender_id=sender_id)
 
@@ -141,55 +193,73 @@ class WebUIServer:
         async def api_me():
             """
             通过确定当前session中记录的`login_key`，来确认当前登陆的用户（sender_id）是谁"""
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
-            return api_success(sender_id=sender_id)
+            return api_success(sender_id=sender_id, is_admin=self.is_admin_user(sender_id))
 
         @self.app.route("/api/todos", methods=["GET"])
         async def list_todos():
             """
             获取当前登陆用户的所有任务。
-            任务按到期时间排序，最早到期在前。
+            规则：未完成任务优先，其次按 sender_id 升序，最后按 due_time 降序。
             """
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
-            todos: List[Todo] = self.tm.db.get_todo_by_creator(sender_id)
-            todos.sort(key=lambda t: t.due_time)
+            if self.current_request_is_admin():
+                todos: List[Todo] = self.tm.get_all_todos()
+            else:
+                todos = self.tm.get_todos_by_creator(sender_id)
+            todos.sort(key=lambda t: (t.completed, t.creator, -t.due_time))
             return api_success(todos=[t.model_dump() for t in todos])
 
         @self.app.route("/api/todos", methods=["POST"])
         async def create_todo():
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
-            # 尝试获取前端传来的数据，并进行检验
             try:
-                data: EditTodoPayload = await request.get_json(silent=True)
+                data = await request.get_json(silent=True) or {}
             except pydantic.ValidationError:
                 return api_error(400, "内容、时间、umo 不能为空")
-            content = data["content"].strip()
-            due_time = data["due_time"]
-            completed = data["completed"]
+            content = (data.get("content") or "").strip()
+            due_time = data.get("due_time")
+            completed = data.get("completed", False)
+            if not content or not due_time:
+                return api_error(400, "内容、到期时间不能为空")
 
-            todo_id = self.tm.create_todo(
-                creator=sender_id,
-                umo=self.sender_id_2_umo[sender_id],
-                content=content,
-                due_time=due_time,
-                completed=completed,
-            )
-            if todo_id == -1:
-                logger.error(f"WebUI 创建任务失败：任务到期时间太早")
-                return api_error(500, f"创建失败：任务到期时间太早")
-
-            return api_success(message="任务创建成功", todo_id=todo_id)
+            owners = data.get("owners") or [sender_id]
+            if isinstance(owners, str):
+                owners = [owners]
+            tags = data.get("tags") or []
+            created: List[int] = []
+            for owner in owners:
+                owner = str(owner).strip()
+                if not owner:
+                    continue
+                umo = self._owner_umo(owner, sender_id)
+                if not umo:
+                    continue
+                todo_id = self.tm.create_todo(
+                    creator=owner,
+                    umo=umo,
+                    content=content,
+                    due_time=due_time,
+                    completed=completed,
+                    tags=list(tags),
+                )
+                if todo_id != -1:
+                    created.append(todo_id)
+            if not created:
+                logger.error("WebUI 创建任务失败：任务到期时间太早或缺少会话信息")
+                return api_error(500, "创建失败：任务到期时间太早或缺少会话信息")
+            return api_success(message=f"已创建 {len(created)} 个任务", todo_ids=created)
 
         @self.app.route("/api/todos/<int:todo_id>", methods=["PUT"])
         async def update_todo(todo_id):
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
@@ -201,22 +271,40 @@ class WebUIServer:
                 return api_error(400, "内容、到期时间不能为空")
 
             todo = self.tm.db.get_todo_by_id(todo_id)
-            if not todo or todo.creator != sender_id:
+            if not todo or (todo.creator != sender_id and not self.current_request_is_admin()):
                 return api_error(404, "任务未找到或无权限")
             updated_todo_id = self.tm.update_todo(todo_id, content, due_time, completed)
             if updated_todo_id == -1:
                 return api_error(500, "更新失败：任务不存在")
 
+            owners = data.get("owners")
+            if owners:
+                if isinstance(owners, str):
+                    owners = [owners]
+                owner = str(owners[0]).strip()
+                if owner:
+                    umo = self._owner_umo(owner, sender_id) or todo.umo
+                    self.tm.db.update_todo_owner(todo_id, owner, umo)
+
+            tags = data.get("tags")
+            if tags is not None:
+                todo = self.tm.db.get_todo_by_id(todo_id)
+                for tag in todo.tags if todo else []:
+                    self.tm.tag_db.remove_tag_from_todo(todo_id, tag)
+                for tag in tags:
+                    if isinstance(tag, str) and tag.strip():
+                        self.tm.tag_db.attach_tag_to_todo(todo_id, tag.strip())
+
             return api_success(message="任务已更新", todo_id=updated_todo_id)
 
         @self.app.route("/api/todos/<int:todo_id>", methods=["DELETE"])
         async def delete_todo(todo_id):
-            sender_id = self.current_session_sender_id()
+            sender_id = self.current_request_sender_id()
             if not sender_id:
                 return api_error(401, "未登录")
 
             todo = self.tm.db.get_todo_by_id(todo_id)
-            if not todo or todo.creator != sender_id:
+            if not todo or (todo.creator != sender_id and not self.current_request_is_admin()):
                 return api_error(404, "任务未找到或无权限")
 
             self.tm.db.delete_todo(todo_id)
@@ -224,6 +312,139 @@ class WebUIServer:
             if timer and not timer.done():
                 timer.cancel()
             return api_success(message="任务已删除")
+
+        @self.app.route("/api/admin/toggle", methods=["POST"])
+        async def toggle_admin():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            user = self.tm.user_db.get_user(sender_id)
+            current_admin = bool(user and user.is_admin)
+            umo = (user.umo if user else "") or self.sender_id_2_umo.get(sender_id, "")
+            if current_admin:
+                self.tm.user_db.add_or_update_user(sender_id, umo, is_admin=False)
+                return api_success(is_admin=False, message="已关闭管理员权限")
+            if sender_id in self.admin_sender_ids:
+                self.tm.user_db.add_or_update_user(sender_id, umo, is_admin=True)
+                return api_success(is_admin=True, message="已开启管理员权限")
+            return api_error(403, "您不是管理员，无法开启管理员权限")
+
+        @self.app.route("/api/tags", methods=["GET"])
+        async def list_tag_catalogue():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            is_admin = self.is_admin_user(sender_id)
+            if is_admin:
+                users = [
+                    {
+                        "sender_id": u.sender_id,
+                        "umo": u.umo,
+                        "is_admin": u.is_admin,
+                        "nickname": u.nickname or u.sender_id,
+                        "tags": self.tm.tag_db.get_user_tags(u.sender_id),
+                    }
+                    for u in self.tm.user_db.list_users()
+                ]
+            else:
+                own = self.tm.user_db.get_user(sender_id)
+                users = [
+                    {
+                        "sender_id": sender_id,
+                        "umo": (own.umo if own else ""),
+                        "is_admin": bool(own and own.is_admin),
+                        "nickname": (own.nickname or sender_id) if own else sender_id,
+                        "tags": self.tm.tag_db.get_user_tags(sender_id),
+                    }
+                ]
+            tag_senders: Dict[str, List[str]] = {}
+            for u in users:
+                for tag in u["tags"]:
+                    tag_senders.setdefault(tag, []).append(u["sender_id"])
+            return api_success(is_admin=is_admin, users=users, tag_senders=tag_senders)
+
+        @self.app.route("/api/tags", methods=["POST"])
+        async def add_user_tag():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            tag = (body.get("tag") or "").strip()
+            if not tag:
+                return api_error(400, "标签不能为空")
+            target = (body.get("sender_id") or sender_id).strip()
+            if target != sender_id and not self.is_admin_user(sender_id):
+                return api_error(403, "无权限")
+            user = self.tm.user_db.get_user(target)
+            umo = (user.umo if user else "") or self.sender_id_2_umo.get(target, "")
+            self.tm.user_db.add_or_update_user(target, umo, bool(user and user.is_admin))
+            self.tm.tag_db.attach_tag_to_user(target, tag)
+            return api_success(message="标签已添加", tags=self.tm.tag_db.get_user_tags(target))
+
+        @self.app.route("/api/tags", methods=["DELETE"])
+        async def remove_user_tag():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            tag = (body.get("tag") or "").strip()
+            if not tag:
+                return api_error(400, "标签不能为空")
+            target = (body.get("sender_id") or sender_id).strip()
+            if target != sender_id and not self.is_admin_user(sender_id):
+                return api_error(403, "无权限")
+            removed = self.tm.tag_db.remove_tag_from_user(target, tag)
+            return api_success(removed=bool(removed), tags=self.tm.tag_db.get_user_tags(target))
+
+        @self.app.route("/api/users/nickname", methods=["POST"])
+        async def update_own_nickname():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            nickname = (body.get("nickname") or "").strip()
+            if not nickname:
+                return api_error(400, "昵称不能为空")
+            self.tm.user_db.update_nickname(sender_id, nickname)
+            return api_success(message="昵称已更新", nickname=nickname)
+
+        @self.app.route("/api/users/umo", methods=["POST"])
+        async def update_user_umo():
+            current = self.current_request_sender_id()
+            if not current:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            target = (body.get("sender_id") or current).strip()
+            umo = (body.get("umo") or "").strip()
+            if target != current and not self.current_request_is_admin():
+                return api_error(403, "无权限")
+            if not umo:
+                return api_error(400, "umo不能为空")
+            if not self.tm.user_db.update_umo(target, umo):
+                return api_error(404, "用户不存在")
+            return api_success(message="umo已更新", umo=umo)
+
+        @self.app.route("/api/users/<sender_id>", methods=["GET"])
+        async def get_user_detail(sender_id):
+            """查询某用户的完整信息（userDB 所有字段 + 关联标签）。
+
+            普通用户只能查看自己；管理员可查看任意用户。
+            """
+            current = self.current_request_sender_id()
+            if not current:
+                return api_error(401, "未登录")
+            if sender_id != current and not self.current_request_is_admin():
+                return api_error(403, "无权限")
+            user = self.tm.user_db.get_user(sender_id)
+            if not user:
+                return api_error(404, "用户不存在")
+            return api_success(
+                sender_id=user.sender_id,
+                umo=user.umo,
+                is_admin=user.is_admin,
+                nickname=user.nickname or user.sender_id,
+                tags=self.tm.tag_db.get_user_tags(sender_id),
+            )
 
     # --- Server lifecycle ---
     def request_shutdown(self):

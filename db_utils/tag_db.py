@@ -1,3 +1,5 @@
+from typing import List
+
 from .dbm import DBManager
 
 
@@ -56,3 +58,57 @@ class TagDB:
                 "INSERT OR IGNORE INTO TodoTags (todo_id, tag_id) VALUES (?, ?)",
                 (todo_id, tag_id),
             )
+
+    def remove_tag_from_todo(self, todo_id: int, tag: str) -> bool:
+        """Remove a tag from a todo.
+
+        Args:
+            todo_id: Todo ID.
+            tag: Tag name.
+
+        Returns:
+            Whether the association was removed.
+        """
+        with self.dbm.get_conn() as conn:
+            cur = conn.execute(
+                """DELETE FROM TodoTags
+                WHERE todo_id = ? AND tag_id IN (SELECT tag_id FROM Tags WHERE name = ?)""",
+                (todo_id, tag),
+            )
+            return cur.rowcount > 0
+
+    def get_user_tags(self, sender_id: str) -> List[str]:
+        """查询指定用户的全部标签。
+
+        Args:
+            sender_id: 用户 sender_id。
+
+        Returns:
+            标签名列表。
+        """
+        with self.dbm.get_conn() as conn:
+            rows = conn.execute(
+                """SELECT t.name FROM Tags t
+                JOIN UserTags ut ON ut.tag_id = t.tag_id
+                WHERE ut.sender_id = ? ORDER BY t.name""",
+                (sender_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def remove_tag_from_user(self, sender_id: str, tag: str) -> bool:
+        """移除用户身上的某个标签。
+
+        Args:
+            sender_id: 用户 sender_id。
+            tag: 标签名称。
+
+        Returns:
+            是否删除了关联。
+        """
+        with self.dbm.get_conn() as conn:
+            cur = conn.execute(
+                """DELETE FROM UserTags
+                WHERE sender_id = ? AND tag_id IN (SELECT tag_id FROM Tags WHERE name = ?)""",
+                (sender_id, tag),
+            )
+            return cur.rowcount > 0
