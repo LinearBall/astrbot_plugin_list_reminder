@@ -160,8 +160,8 @@ class ListReminderPlugin(Star):
         msg = event.message_str
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
-        group_id = event.get_group_id()
-        yield event.plain_result(f"收到消息：{msg}，来自 sender_id: {sender_id}, group_id: {group_id}, umo: {umo}")
+        # group_id = event.get_group_id()
+        # yield event.plain_result(f"收到消息：{msg}，来自 sender_id: {sender_id}, group_id: {group_id}, umo: {umo}")
 
         # 使用LLM判断是否为提醒意图
         if not await self._is_reminder_intent(msg, event):

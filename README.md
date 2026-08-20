@@ -6,7 +6,7 @@
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen)](https://github.com/LinearBall/astrbot_plugin_list_reminder/pulls)
-[![Version](https://img.shields.io/badge/Version-v2.1-blue)](https://github.com/LinearBall/astrbot_plugin_list_reminder/releases)
+[![Version](https://img.shields.io/badge/Version-v2.2.0-blue)](https://github.com/LinearBall/astrbot_plugin_list_reminder/releases)
 
 </div>
 
@@ -22,7 +22,7 @@
   - [🖥️ WebUI 管理界面](#️-webui-管理界面)
   - [📂 数据存储](#-数据存储)
   - [⚠️ 注意事项](#️-注意事项)
-  - [🆕 最新版本改动（v2.1）](#-最新版本改动v21)
+  - [🆕 最新版本改动（v2.2.0）](#-最新版本改动v220)
   - [🛠️ 问题反馈](#️-问题反馈)
   - [📄 许可证](#-许可证)
 
@@ -115,12 +115,14 @@
 2. WebUI 后台默认监听 `0.0.0.0:{port}`，暴露在公网时请务必配合防火墙与登录密钥使用。
 3. 通过 WebUI 后台创建任务时，到期时间不可早于当前时间。
 
-## 🆕 最新版本改动（v2.1）
+## 🆕 最新版本改动（v2.2.0）
 
-- 🏷️ 新增任务标签功能：AI 创建任务时可自动提取标签，任务列表、即时回复与到期提醒消息中都会显示标签
-- 🔒 新增 `/列表提醒 关闭后台` 命令，可随时关闭 WebUI 后台
-- 🌐 支持配置公网 IP，开启后台时返回公网访问地址
-- 🗄️ 配置项统一迁移到数据库层统一管理
+- 🏷️ 新增标签功能：列表命令与前端页面显示任务标签；新增用户标签，用户可管理自己的标签，并可按标签筛选用户
+- 👑 新增管理员模式，管理员可管理所有任务
+- 🔐 支持同一浏览器多用户登录后台
+- 🚀 任务新建功能更新：支持按用户标签批量群发任务，支持为任务添加标签
+
+更多历史版本细节，请查看 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 🛠️ 问题反馈
 
