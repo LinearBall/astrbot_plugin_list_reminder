@@ -1,4 +1,4 @@
-import type { ApiResp, EditTodoPayload, TagCatalogue, Todo } from "@/types.ts";
+import type { ApiResp, EditTodoPayload, TagCatalogue, Todo, UserDetail } from "@/types.ts";
 import axios from "axios";
 
 /**
@@ -133,4 +133,23 @@ async function removeUserTag(senderId: string, tag: string): Promise<ApiResp> {
     return resp.data as ApiResp;
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin, getTagCatalogue, addUserTag, removeUserTag }
+/**
+ * 修改当前用户自己的昵称
+ * @param nickname 新昵称
+ */
+async function updateOwnNickname(nickname: string): Promise<ApiResp> {
+    let resp = await http.post<ApiResp>("/api/users/nickname", { nickname: nickname });
+    return resp.data as ApiResp;
+}
+
+/**
+ * 查询某用户的完整信息（userDB 所有字段 + 关联标签）
+ * @param senderId 目标用户 sender_id
+ */
+async function getUserDetail(senderId: string): Promise<UserDetail | null> {
+    let resp = await http.get<ApiResp>(`/api/users/${senderId}`);
+    let data = resp.data as ApiResp;
+    return data.code === 200 ? data["payload"] as UserDetail : null;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin, getTagCatalogue, addUserTag, removeUserTag, updateOwnNickname, getUserDetail }

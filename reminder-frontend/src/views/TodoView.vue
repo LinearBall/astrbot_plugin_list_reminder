@@ -1,15 +1,15 @@
 <script setup lang="ts">
 // Vue机能
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 // Naive UI机能
 import { Delete20Regular, DocumentEdit20Regular } from "@vicons/fluent";
 import { LogOutFilled, PlusFilled, RefreshFilled } from "@vicons/material";
-import { NDynamicTags, NTag, NButton, NButtonGroup, NCard, NCheckbox, NEmpty, NIcon, NList, NListItem, NText, useMessage } from "naive-ui";
+import { NButton, NButtonGroup, NCard, NCheckbox, NDescriptions, NDescriptionsItem, NDynamicTags, NEmpty, NIcon, NInput, NList, NListItem, NModal, NTag, NText, useMessage } from "naive-ui";
 // 自定义机能
 import EditTodoModal from '@/components/EditTodoModal.vue';
-import { addUserTag, checkIfAlreadyLoggedIn, delTodoById, getTagCatalogue, getTodos, logout, removeUserTag, toggleAdmin, updateTodoById } from '@/fbApi/apis.ts';
-import type { EditTodoPayload, TagCatalogue, TagUser, Todo } from '@/types.ts';
+import { addUserTag, checkIfAlreadyLoggedIn, delTodoById, getTagCatalogue, getTodos, getUserDetail, logout, removeUserTag, toggleAdmin, updateOwnNickname, updateTodoById } from '@/fbApi/apis.ts';
+import type { EditTodoPayload, TagCatalogue, TagUser, Todo, UserDetail } from '@/types.ts';
 
 const router = useRouter()
 const message = useMessage();
@@ -20,11 +20,38 @@ const editingTodo = ref<Todo | null>(null)
 const isAdmin = ref(false)
 const meSenderId = ref('')
 const tagCatalogue = ref<TagCatalogue | null>(null)
+const myNickname = ref('')
+const editingNickname = ref(false)
+// 用户详情弹窗
+const showDetail = ref(false)
+const detailUser = ref<UserDetail | null>(null)
+
+/** sender_id -> 昵称 映射，用于任务列表等处展示昵称 */
+const nicknameMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  tagCatalogue.value?.users.forEach(u => { map[u.sender_id] = u.nickname || u.sender_id })
+  return map
+})
+
+function nicknameOf(senderId: string) {
+  return nicknameMap.value[senderId] || senderId
+}
+
+/** 当前用户昵称的展示值（取不到时回退 sender_id） */
+const myDisplayNickname = computed(() => nicknameMap.value[meSenderId.value] || meSenderId.value)
 
 const ownTags = computed(() => {
   const me = tagCatalogue.value?.users.find(u => u.sender_id === meSenderId.value)
   return me ? me.tags : []
 })
+
+/** 自己的昵称随标签目录同步变化，保证输入框显示最新值 */
+watch(
+  () => tagCatalogue.value?.users.find(u => u.sender_id === meSenderId.value)?.nickname,
+  (nick) => {
+    if (nick !== undefined) myNickname.value = nick
+  }
+)
 
 async function handleLogout() {
   logout().then(() => {
@@ -126,6 +153,42 @@ async function handleToggleAdmin() {
       console.error(err);
       message.error("操作失败，请稍后重试");
     });
+}
+
+/**
+ * 保存当前用户自己的昵称
+ */
+function saveMyNickname() {
+  const nick = myNickname.value.trim()
+  if (!nick) {
+    message.error("昵称不能为空");
+    editingNickname.value = false;
+    return
+  }
+  updateOwnNickname(nick).then(res => {
+    if (res.code === 200) {
+      message.success("昵称已更新");
+      editingNickname.value = false;
+      refreshTags();
+    } else {
+      message.error(res.payload["message"] || "修改昵称失败");
+    }
+  });
+}
+
+/**
+ * 打开某个用户的详情弹窗（userDB 全部字段 + 标签）
+ * @param senderId 目标用户
+ */
+function openUserDetail(senderId: string) {
+  getUserDetail(senderId).then(d => {
+    if (!d) {
+      message.error("获取用户信息失败");
+      return;
+    }
+    detailUser.value = d
+    showDetail.value = true
+  });
 }
 
 /**
@@ -240,8 +303,8 @@ onMounted(async () => {
                 <n-tag v-for="tag in todo.tags" :key="tag" size="small" round>{{ tag }}</n-tag>
               </div>
               <div class="todo-meta">
-                <!-- 任务所有者 -->
-                <n-text depth="3">所有者：{{ todo.creator }}</n-text>
+                <!-- 任务所有者（显示昵称） -->
+                <n-text depth="3">所有者：{{ nicknameOf(todo.creator) }}</n-text>
 
                 <!-- 到期时间 -->
                 <n-text depth="3">{{ toLocalISOString(todo.due_time) }}</n-text>
@@ -271,29 +334,77 @@ onMounted(async () => {
       </n-list>
     </n-card>
 
-    <!-- 标签管理：普通用户管理自己的标签，管理员管理所有用户 -->
-    <n-card class="tag-card shadow-edge" title="标签管理">
-      <!-- 普通用户：仅自己的标签 -->
+    <!-- 用户标签管理：普通用户管理自己的昵称与标签，管理员管理所有用户 -->
+    <n-card class="tag-card shadow-edge" title="用户标签管理">
+      <!-- 普通用户：仅自己 -->
       <template v-if="!isAdmin">
-        <div class="tag-row">
-          <n-text depth="2">我的标签</n-text>
-          <n-dynamic-tags :value="ownTags" @update:value="onOwnTagsUpdated" />
+        <div class="self-panel">
+          <div class="user-nick">
+            <template v-if="editingNickname">
+              <n-input v-model:value="myNickname" size="small" :style="{ width: '200px' }" placeholder="输入新昵称" @keyup.enter="saveMyNickname" @blur="saveMyNickname" />
+            </template>
+            <template v-else>
+              <n-button text type="primary" @click="openUserDetail(meSenderId)">{{ myDisplayNickname }}</n-button>
+              <n-button size="tiny" quaternary type="info" @click="editingNickname = true">编辑昵称</n-button>
+            </template>
+          </div>
+          <n-text depth="3" class="nickname-hint">提示：点击昵称查看详情，点“编辑昵称”可修改自己的昵称</n-text>
+          <div class="own-tags">
+            <n-text depth="2">我的标签</n-text>
+            <n-dynamic-tags :value="ownTags" @update:value="onOwnTagsUpdated" />
+          </div>
         </div>
       </template>
 
-      <!-- 管理员：所有用户各自的标签 -->
+      <!-- 管理员：所有用户 -->
       <template v-else>
         <n-empty v-if="!tagCatalogue || tagCatalogue.users.length === 0" description="暂无用户" />
         <div v-else class="admin-tag-list">
-          <div v-for="user in tagCatalogue.users" :key="user.sender_id" class="tag-row">
-            <n-text depth="2">{{ user.sender_id }}<n-tag v-if="user.is_admin" size="tiny" type="warning" class="admin-badge">管理员</n-tag></n-text>
+          <div v-for="user in tagCatalogue.users" :key="user.sender_id" class="tag-row" :class="{ 'is-me': user.sender_id === meSenderId }">
+            <div class="user-nick">
+              <!-- 自己的昵称：点击看详情，旁边有编辑昵称按钮 -->
+              <template v-if="user.sender_id === meSenderId">
+                <template v-if="editingNickname">
+                  <n-input v-model:value="myNickname" size="small" :style="{ width: '200px' }" placeholder="输入新昵称" @keyup.enter="saveMyNickname" @blur="saveMyNickname" />
+                </template>
+                <template v-else>
+                  <n-button text type="primary" @click="openUserDetail(user.sender_id)">{{ myDisplayNickname }}</n-button>
+                  <n-button size="tiny" quaternary type="info" @click="editingNickname = true">编辑昵称</n-button>
+                </template>
+              </template>
+              <!-- 他人昵称点击查看详情 -->
+              <template v-else>
+                <n-button text type="primary" @click="openUserDetail(user.sender_id)">{{ user.nickname }}</n-button>
+                <n-text depth="3" class="sender-hint">({{ user.sender_id }})</n-text>
+              </template>
+              <n-tag v-if="user.is_admin" size="tiny" type="warning" class="admin-badge">管理员</n-tag>
+            </div>
             <n-dynamic-tags :value="user.tags" @update:value="onUserTagsUpdated($event, user)" />
           </div>
+          <n-text depth="3" class="nickname-hint">提示：点击昵称查看详情；自己的昵称可点“编辑昵称”修改</n-text>
         </div>
       </template>
     </n-card>
 
     <EditTodoModal :show="showEditModal" :todo="editingTodo" :me="meSenderId" :is-admin="isAdmin" :tag-catalogue="tagCatalogue" @close="closeEditModal" @save="handleEditSaved" />
+
+    <!-- 用户详情弹窗 -->
+    <n-modal v-model:show="showDetail" preset="card" title="用户详情" :style="{ width: '460px' }">
+      <n-descriptions v-if="detailUser" :column="1" label-placement="left">
+        <n-descriptions-item label="昵称">{{ detailUser.nickname }}</n-descriptions-item>
+        <n-descriptions-item label="sender_id">{{ detailUser.sender_id }}</n-descriptions-item>
+        <n-descriptions-item label="推送会话 umo">{{ detailUser.umo || '（无）' }}</n-descriptions-item>
+        <n-descriptions-item label="管理员">{{ detailUser.is_admin ? '是' : '否' }}</n-descriptions-item>
+        <n-descriptions-item label="用户标签">
+          <template v-if="detailUser.tags.length > 0">
+            <div class="detail-tags">
+              <n-tag v-for="t in detailUser.tags" :key="t" size="small" round>{{ t }}</n-tag>
+            </div>
+          </template>
+          <n-text v-else depth="3">（无）</n-text>
+        </n-descriptions-item>
+      </n-descriptions>
+    </n-modal>
   </div>
 </template>
 
@@ -377,12 +488,40 @@ onMounted(async () => {
   margin-top: 16px;
 }
 
+.self-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-nick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nickname-hint {
+  font-size: 12px;
+}
+
+.own-tags {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
 .tag-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.tag-row:last-child {
+  border-bottom: none;
 }
 
 .admin-tag-list {
@@ -390,7 +529,17 @@ onMounted(async () => {
   flex-direction: column;
 }
 
+.sender-hint {
+  font-size: 12px;
+}
+
 .admin-badge {
   margin-left: 6px;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

@@ -45,6 +45,7 @@ class User(BaseModel):
     sender_id: str
     umo: str
     is_admin: bool
+    nickname: str = ""
 
     @staticmethod
     def from_db_row(row: s3.Row) -> "User":
@@ -52,4 +53,5 @@ class User(BaseModel):
             sender_id=row[0],
             umo=row[1],
             is_admin=bool(row[2]),
+            nickname=(row[3] if len(row) > 3 else ""),
         )

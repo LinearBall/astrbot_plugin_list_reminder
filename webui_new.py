@@ -323,16 +323,19 @@ class WebUIServer:
                         "sender_id": u.sender_id,
                         "umo": u.umo,
                         "is_admin": u.is_admin,
+                        "nickname": u.nickname or u.sender_id,
                         "tags": self.tm.tag_db.get_user_tags(u.sender_id),
                     }
                     for u in self.tm.user_db.list_users()
                 ]
             else:
+                own = self.tm.user_db.get_user(sender_id)
                 users = [
                     {
                         "sender_id": sender_id,
-                        "umo": "",
-                        "is_admin": False,
+                        "umo": (own.umo if own else ""),
+                        "is_admin": bool(own and own.is_admin),
+                        "nickname": (own.nickname or sender_id) if own else sender_id,
                         "tags": self.tm.tag_db.get_user_tags(sender_id),
                     }
                 ]
@@ -374,6 +377,40 @@ class WebUIServer:
                 return api_error(403, "无权限")
             removed = self.tm.tag_db.remove_tag_from_user(target, tag)
             return api_success(removed=bool(removed), tags=self.tm.tag_db.get_user_tags(target))
+
+        @self.app.route("/api/users/nickname", methods=["POST"])
+        async def update_own_nickname():
+            sender_id = self.current_request_sender_id()
+            if not sender_id:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            nickname = (body.get("nickname") or "").strip()
+            if not nickname:
+                return api_error(400, "昵称不能为空")
+            self.tm.user_db.update_nickname(sender_id, nickname)
+            return api_success(message="昵称已更新", nickname=nickname)
+
+        @self.app.route("/api/users/<sender_id>", methods=["GET"])
+        async def get_user_detail(sender_id):
+            """查询某用户的完整信息（userDB 所有字段 + 关联标签）。
+
+            普通用户只能查看自己；管理员可查看任意用户。
+            """
+            current = self.current_request_sender_id()
+            if not current:
+                return api_error(401, "未登录")
+            if sender_id != current and not self.current_request_is_admin():
+                return api_error(403, "无权限")
+            user = self.tm.user_db.get_user(sender_id)
+            if not user:
+                return api_error(404, "用户不存在")
+            return api_success(
+                sender_id=user.sender_id,
+                umo=user.umo,
+                is_admin=user.is_admin,
+                nickname=user.nickname or user.sender_id,
+                tags=self.tm.tag_db.get_user_tags(sender_id),
+            )
 
     # --- Server lifecycle ---
     def request_shutdown(self):
