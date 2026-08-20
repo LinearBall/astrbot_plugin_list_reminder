@@ -157,6 +157,24 @@ class TodoDB:
             )
             return cursor.rowcount > 0
 
+    def update_todo_owner(self, todo_id: int, creator: str, umo: str) -> bool:
+        """Update a todo owner and its reminder session.
+
+        Args:
+            todo_id: Todo ID.
+            creator: New owner sender ID.
+            umo: New owner reminder session.
+
+        Returns:
+            Whether a row was updated.
+        """
+        with self.dbm.get_conn() as conn:
+            cur = conn.execute(
+                "update Todos set creator = ?, umo = ? where todo_id = ?",
+                (creator, umo, todo_id),
+            )
+            return cur.rowcount > 0
+
     def delete_todo(self, todo_id: int):
         """
         删除指定待办

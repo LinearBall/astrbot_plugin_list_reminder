@@ -43,8 +43,8 @@ watch(
       form.content = todo.content
       // Todo.due_time 兼容秒/毫秒，这里统一转成毫秒给 n-date-picker
       form.dueTimeMillis = todo.due_time > 1e11 ? todo.due_time : todo.due_time * 1000
-      form.owners = []
-      form.tags = []
+      form.owners = [todo.creator]
+      form.tags = [...todo.tags]
     } else {
       //  要创建新待办：默认所有者填自己的 sender_id，标签留空
       form.content = "";
@@ -109,8 +109,8 @@ function handleSave() {
     content: form.content.trim(),
     due_time: Math.floor(form.dueTimeMillis / 1000),  // 转换为秒
     completed: completedStatus,
-    owners: isNew ? form.owners : undefined,
-    tags: isNew ? form.tags : undefined,
+    owners: form.owners.map(owner => owner.trim()).filter(owner => owner.length > 0),
+    tags: form.tags,
   })
 }
 </script>
@@ -123,7 +123,6 @@ function handleSave() {
       </n-form-item>
 
       <template v-if="todo === null">
-        <!-- 只有新建时才能指定所有者与标签；编辑已有待办保持不变 -->
         <n-form-item label="任务所有者">
           <n-dynamic-input v-model:value="form.owners" :on-create="() => ''">
             <template #default="{ value, index }">
@@ -131,11 +130,17 @@ function handleSave() {
             </template>
           </n-dynamic-input>
         </n-form-item>
+      </template>
 
-        <n-form-item label="任务标签">
-          <n-dynamic-tags v-model:value="form.tags" />
-        </n-form-item>
+      <n-form-item v-else label="sender_id">
+        <n-input v-model:value="form.owners[0]" placeholder="输入任务所有者 sender_id" />
+      </n-form-item>
 
+      <n-form-item label="任务标签">
+        <n-dynamic-tags v-model:value="form.tags" />
+      </n-form-item>
+
+      <template v-if="todo === null">
         <!-- 管理员可按标签批量填充所有者 -->
         <n-form-item v-if="isAdmin" label="按标签填入所有者">
           <div class="tag-browser">
@@ -199,3 +204,4 @@ function handleSave() {
   cursor: pointer;
 }
 </style>
+

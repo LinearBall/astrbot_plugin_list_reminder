@@ -43,3 +43,8 @@ export interface UserDetail {
     nickname: string
     tags: string[]
 }
+
+export interface UpdateUmoPayload {
+    sender_id: string
+    umo: string
+}

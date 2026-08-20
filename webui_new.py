@@ -202,7 +202,7 @@ class WebUIServer:
         async def list_todos():
             """
             获取当前登陆用户的所有任务。
-            任务按到期时间排序，最早到期在前。
+            规则：未完成任务优先，其次按 sender_id 升序，最后按 due_time 降序。
             """
             sender_id = self.current_request_sender_id()
             if not sender_id:
@@ -211,7 +211,7 @@ class WebUIServer:
                 todos: List[Todo] = self.tm.get_all_todos()
             else:
                 todos = self.tm.get_todos_by_creator(sender_id)
-            todos.sort(key=lambda t: t.due_time)
+            todos.sort(key=lambda t: (t.completed, t.creator, -t.due_time))
             return api_success(todos=[t.model_dump() for t in todos])
 
         @self.app.route("/api/todos", methods=["POST"])
@@ -276,6 +276,24 @@ class WebUIServer:
             updated_todo_id = self.tm.update_todo(todo_id, content, due_time, completed)
             if updated_todo_id == -1:
                 return api_error(500, "更新失败：任务不存在")
+
+            owners = data.get("owners")
+            if owners:
+                if isinstance(owners, str):
+                    owners = [owners]
+                owner = str(owners[0]).strip()
+                if owner:
+                    umo = self._owner_umo(owner, sender_id) or todo.umo
+                    self.tm.db.update_todo_owner(todo_id, owner, umo)
+
+            tags = data.get("tags")
+            if tags is not None:
+                todo = self.tm.db.get_todo_by_id(todo_id)
+                for tag in todo.tags if todo else []:
+                    self.tm.tag_db.remove_tag_from_todo(todo_id, tag)
+                for tag in tags:
+                    if isinstance(tag, str) and tag.strip():
+                        self.tm.tag_db.attach_tag_to_todo(todo_id, tag.strip())
 
             return api_success(message="任务已更新", todo_id=updated_todo_id)
 
@@ -389,6 +407,22 @@ class WebUIServer:
                 return api_error(400, "昵称不能为空")
             self.tm.user_db.update_nickname(sender_id, nickname)
             return api_success(message="昵称已更新", nickname=nickname)
+
+        @self.app.route("/api/users/umo", methods=["POST"])
+        async def update_user_umo():
+            current = self.current_request_sender_id()
+            if not current:
+                return api_error(401, "未登录")
+            body = await request.get_json(silent=True) or {}
+            target = (body.get("sender_id") or current).strip()
+            umo = (body.get("umo") or "").strip()
+            if target != current and not self.current_request_is_admin():
+                return api_error(403, "无权限")
+            if not umo:
+                return api_error(400, "umo不能为空")
+            if not self.tm.user_db.update_umo(target, umo):
+                return api_error(404, "用户不存在")
+            return api_success(message="umo已更新", umo=umo)
 
         @self.app.route("/api/users/<sender_id>", methods=["GET"])
         async def get_user_detail(sender_id):

@@ -5,10 +5,10 @@ import { useRouter } from 'vue-router';
 // Naive UI机能
 import { Delete20Regular, DocumentEdit20Regular } from "@vicons/fluent";
 import { LogOutFilled, PlusFilled, RefreshFilled } from "@vicons/material";
-import { NButton, NButtonGroup, NCard, NCheckbox, NDescriptions, NDescriptionsItem, NDynamicTags, NEmpty, NIcon, NInput, NList, NListItem, NModal, NTag, NText, useMessage } from "naive-ui";
+import { NButton, NButtonGroup, NCard, NCheckbox, NDescriptions, NDescriptionsItem, NDynamicTags, NEmpty, NIcon, NInput, NList, NListItem, NModal, NSelect, NTag, NText, useMessage } from "naive-ui";
 // 自定义机能
 import EditTodoModal from '@/components/EditTodoModal.vue';
-import { addUserTag, checkIfAlreadyLoggedIn, delTodoById, getTagCatalogue, getTodos, getUserDetail, logout, removeUserTag, toggleAdmin, updateOwnNickname, updateTodoById } from '@/fbApi/apis.ts';
+import { addUserTag, checkIfAlreadyLoggedIn, delTodoById, getTagCatalogue, getTodos, getUserDetail, logout, removeUserTag, toggleAdmin, updateOwnNickname, updateTodoById, updateUserUmo } from '@/fbApi/apis.ts';
 import type { EditTodoPayload, TagCatalogue, TagUser, Todo, UserDetail } from '@/types.ts';
 
 const router = useRouter()
@@ -25,6 +25,12 @@ const editingNickname = ref(false)
 // 用户详情弹窗
 const showDetail = ref(false)
 const detailUser = ref<UserDetail | null>(null)
+const editingUmo = ref(false)
+const detailUmo = ref('')
+const nicknameFilter = ref('')
+const tagFilter = ref<string | null>(null)
+const showUncompleted = ref(true)
+const showCompleted = ref(false)
 
 /** sender_id -> 昵称 映射，用于任务列表等处展示昵称 */
 const nicknameMap = computed<Record<string, string>>(() => {
@@ -39,6 +45,24 @@ function nicknameOf(senderId: string) {
 
 /** 当前用户昵称的展示值（取不到时回退 sender_id） */
 const myDisplayNickname = computed(() => nicknameMap.value[meSenderId.value] || meSenderId.value)
+
+const availableTodoTags = computed(() => {
+  const tags = new Set<string>()
+  todos.value.forEach(todo => todo.tags.forEach(tag => tags.add(tag)))
+  return Array.from(tags).sort().map(tag => ({ label: tag, value: tag }))
+})
+
+const filteredTodos = computed(() => {
+  const nickname = nicknameFilter.value.trim().toLowerCase()
+  const tag = tagFilter.value
+  return todos.value.filter(todo => {
+    if (!showUncompleted.value && !todo.completed) return false
+    if (!showCompleted.value && todo.completed) return false
+    if (tag && !todo.tags.includes(tag)) return false
+    if (nickname && !nicknameOf(todo.creator).toLowerCase().includes(nickname)) return false
+    return true
+  })
+})
 
 const ownTags = computed(() => {
   const me = tagCatalogue.value?.users.find(u => u.sender_id === meSenderId.value)
@@ -62,6 +86,32 @@ async function handleLogout() {
 function refreshTodos() {
   getTodos().then(newTodos => {
     todos.value = newTodos;
+    if (tagFilter.value && !availableTodoTags.value.some(option => option.value === tagFilter.value)) {
+      tagFilter.value = null
+    }
+  })
+}
+
+/**
+ * Save the umo shown in the user detail modal.
+ */
+function saveUserUmo() {
+  if (!detailUser.value) return
+  const user = detailUser.value
+  const umo = detailUmo.value.trim()
+  if (!umo) {
+    message.error("umo不能为空")
+    return
+  }
+  updateUserUmo({ sender_id: user.sender_id, umo }).then(res => {
+    if (res.code === 200) {
+      user.umo = umo
+      editingUmo.value = false
+      message.success("umo已更新")
+      refreshTags()
+    } else {
+      message.error(res.payload["message"] || "修改umo失败")
+    }
   })
 }
 
@@ -187,6 +237,8 @@ function openUserDetail(senderId: string) {
       return;
     }
     detailUser.value = d
+    detailUmo.value = d.umo
+    editingUmo.value = false
     showDetail.value = true
   });
 }
@@ -260,7 +312,7 @@ onMounted(async () => {
         <div class="todo-header">
           <div>
             <span class="todo-title">我的待办事项</span>
-            <span class="todo-count">{{ todos.length }} 项待办</span>
+            <span class="todo-count">{{ filteredTodos.length }} / {{ todos.length }} 项待办</span>
             <span class="todo-owner">当前账号：{{ meSenderId }}</span>
           </div>
           <div class="todo-actions">
@@ -288,10 +340,21 @@ onMounted(async () => {
         </div>
       </template>
 
-      <n-empty v-if="todos.length === 0" description="暂无待办" />
+      <div class="todo-filters">
+        <n-input v-model:value="nicknameFilter" size="small" clearable placeholder="按昵称筛选" />
+        <n-select v-model:value="tagFilter" size="small" clearable placeholder="按标签筛选" :options="availableTodoTags" />
+        <n-button size="small" ghost :type="showUncompleted ? 'primary' : 'default'" @click="showUncompleted = !showUncompleted">
+          {{ showUncompleted ? '隐藏未完成' : '显示未完成' }}
+        </n-button>
+        <n-button size="small" ghost :type="showCompleted ? 'success' : 'default'" @click="showCompleted = !showCompleted">
+          {{ showCompleted ? '隐藏已完成' : '显示已完成' }}
+        </n-button>
+      </div>
+
+      <n-empty v-if="filteredTodos.length === 0" description="暂无待办" />
 
       <n-list v-else>
-        <n-list-item v-for="todo in todos" :key="todo.todo_id">
+        <n-list-item v-for="todo in filteredTodos" :key="todo.todo_id">
           <div class="todo-item">
             <n-checkbox v-model:checked="todo.completed" @update:checked="handleCompletionStatus(todo)" />
             <div class="todo-content">
@@ -334,8 +397,8 @@ onMounted(async () => {
       </n-list>
     </n-card>
 
-    <!-- 用户标签管理：普通用户管理自己的昵称与标签，管理员管理所有用户 -->
-    <n-card class="tag-card shadow-edge" title="用户标签管理">
+    <!-- 用户管理：普通用户管理自己的昵称与标签，管理员管理所有用户 -->
+    <n-card class="tag-card shadow-edge" title="用户管理">
       <!-- 普通用户：仅自己 -->
       <template v-if="!isAdmin">
         <div class="self-panel">
@@ -393,7 +456,19 @@ onMounted(async () => {
       <n-descriptions v-if="detailUser" :column="1" label-placement="left">
         <n-descriptions-item label="昵称">{{ detailUser.nickname }}</n-descriptions-item>
         <n-descriptions-item label="sender_id">{{ detailUser.sender_id }}</n-descriptions-item>
-        <n-descriptions-item label="推送会话 umo">{{ detailUser.umo || '（无）' }}</n-descriptions-item>
+        <n-descriptions-item label="推送会话 umo">
+          <div class="umo-editor">
+            <template v-if="editingUmo">
+              <n-input v-model:value="detailUmo" size="small" :style="{ width: '260px' }" placeholder="输入新 umo" @keyup.enter="saveUserUmo" />
+              <n-button size="tiny" quaternary type="primary" @click="saveUserUmo">保存</n-button>
+              <n-button size="tiny" quaternary @click="editingUmo = false">取消</n-button>
+            </template>
+            <template v-else>
+              <n-text>{{ detailUser.umo || '（无）' }}</n-text>
+              <n-button size="tiny" quaternary type="info" @click="editingUmo = true">编辑umo</n-button>
+            </template>
+          </div>
+        </n-descriptions-item>
         <n-descriptions-item label="管理员">{{ detailUser.is_admin ? '是' : '否' }}</n-descriptions-item>
         <n-descriptions-item label="用户标签">
           <template v-if="detailUser.tags.length > 0">
@@ -409,6 +484,24 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.todo-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.todo-filters .n-input,
+.todo-filters .n-select {
+  max-width: 180px;
+}
+
+.umo-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .todo-card,
 .tag-card {
   width: 100%;

@@ -1,4 +1,4 @@
-import type { ApiResp, EditTodoPayload, TagCatalogue, Todo, UserDetail } from "@/types.ts";
+import type { ApiResp, EditTodoPayload, TagCatalogue, Todo, UpdateUmoPayload, UserDetail } from "@/types.ts";
 import axios from "axios";
 
 /**
@@ -152,4 +152,13 @@ async function getUserDetail(senderId: string): Promise<UserDetail | null> {
     return data.code === 200 ? data["payload"] as UserDetail : null;
 }
 
-export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin, getTagCatalogue, addUserTag, removeUserTag, updateOwnNickname, getUserDetail }
+/**
+ * Update a user's reminder session umo.
+ * @param payload Target user and new umo.
+ */
+async function updateUserUmo(payload: UpdateUmoPayload): Promise<ApiResp> {
+    let resp = await http.post<ApiResp>("/api/users/umo", payload);
+    return resp.data as ApiResp;
+}
+
+export { checkIfAlreadyLoggedIn, checkKey, logout, getTodos, delTodoById, updateTodoById, toggleAdmin, getTagCatalogue, addUserTag, removeUserTag, updateOwnNickname, getUserDetail, updateUserUmo }

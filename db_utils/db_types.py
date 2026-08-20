@@ -1,6 +1,6 @@
 import sqlite3 as s3
 from datetime import datetime
-from typing import List, TypedDict
+from typing import NotRequired, TypedDict
 
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ class Todo(BaseModel):
     content: str
     due_time: int
     completed: bool
-    tags: List[str] = []
+    tags: list[str] = []
 
     @staticmethod
     def from_db_row(row: s3.Row) -> "Todo":
@@ -29,9 +29,7 @@ class Todo(BaseModel):
         frdly_status = "✅" if self.completed else "⏰"
         frdly_due_time = datetime.fromtimestamp(self.due_time).isoformat()
         tag_hint = (" #" + " #".join(self.tags)) if self.tags else ""
-        return "{} [{}] {}{}".format(
-            frdly_status, frdly_due_time, self.content, tag_hint
-        )
+        return f"{frdly_status} [{frdly_due_time}] {self.content}{tag_hint}"
 
 
 class EditTodoPayload(TypedDict):
@@ -39,6 +37,8 @@ class EditTodoPayload(TypedDict):
     content: str
     due_time: int
     completed: bool
+    owners: NotRequired[list[str]]
+    tags: NotRequired[list[str]]
 
 
 class User(BaseModel):

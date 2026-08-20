@@ -72,17 +72,21 @@ class ListReminderPlugin(Star):
 
     @reminder_commands.command("初始化")
     async def initialize_user(self, event: AstrMessageEvent):
-        """在用户数据库登记当前用户，并记录私聊会话（仅限私聊）。"""
+        """在用户数据库登记当前用户，并记录私聊会话，如果没有记录暂时使用群聊umo。"""
         group_id = event.get_group_id()
-        if group_id:
-            yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
-            return
         sender_id = event.get_sender_id()
         umo = event.unified_msg_origin
         existing = self.todo_manager.user_db.get_user(sender_id)
         is_admin = bool(existing and existing.is_admin)
+        if group_id:
+            if existing:
+                yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
+                return
+            else:
+                yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化，当前使用群聊会话umo作为临时记录")
+        else:
+            yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
         self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
-        yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
 
     @reminder_commands.command("关闭后台")
     async def close_webui(self, event: AstrMessageEvent):

@@ -82,7 +82,6 @@ class UserDB:
             rows = cursor.fetchall()
         return [User.from_db_row(row) for row in rows]
 
-
     def list_users(self) -> List[User]:
         """列出所有用户。
 
@@ -110,5 +109,22 @@ class UserDB:
             cur = conn.execute(
                 "UPDATE Users SET nickname = ? WHERE sender_id = ?",
                 (nick, sender_id),
+            )
+            return cur.rowcount > 0
+
+    def update_umo(self, sender_id: str, umo: str) -> bool:
+        """Update a user's reminder session.
+
+        Args:
+            sender_id: User sender ID.
+            umo: New reminder session.
+
+        Returns:
+            Whether a row was updated.
+        """
+        with self.dbm.get_conn() as conn:
+            cur = conn.execute(
+                "UPDATE Users SET umo_of_bot = ? WHERE sender_id = ?",
+                (umo.strip(), sender_id),
             )
             return cur.rowcount > 0
