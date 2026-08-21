@@ -18,3 +18,33 @@
 .shadow-edge {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
+
+.card-inner {
+  width: 100%;
+  max-width: 70vw;
+  align-self: flex-start;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card-count {
+  margin-left: 8px;
+  font-size: 13px;
+  color: #8a919f;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

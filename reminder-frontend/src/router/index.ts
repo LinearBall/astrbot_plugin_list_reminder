@@ -1,8 +1,9 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router';
 
-import LoginView from '../views/LoginView.vue'
-import TodoView from '../views/TodoView.vue'
-import { getAuthKey } from '@/fbApi/apis'
+import { getAuthKey } from '@/fbApi/apis';
+import LoginView from '@/views/LoginView.vue';
+import TodoView from '@/views/TodoView.vue';
+import UserManageView from "@/views/UserManageView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,6 +17,11 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView,
+    },
+    {
+      path: "/user-manage",
+      name: "User Management",
+      component: UserManageView,
     },
     {
       // 未知路径统一回到待办列表
