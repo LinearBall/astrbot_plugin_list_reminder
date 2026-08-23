@@ -1,17 +1,56 @@
-*,
+﻿*,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
+:root {
+  --primary: #2563eb;
+  --primary-light: #3b82f6;
+  --primary-bg: #eff6ff;
+  --success: #10b981;
+  --success-bg: #ecfdf5;
+  --warning: #f59e0b;
+  --warning-bg: #fffbeb;
+  --danger: #ef4444;
+  --danger-bg: #fef2f2;
+  --g50: #f9fafb;
+  --g100: #f3f4f6;
+  --g200: #e5e7eb;
+  --g300: #d1d5db;
+  --g400: #9ca3af;
+  --g500: #6b7280;
+  --g600: #4b5563;
+  --g700: #374151;
+  --g800: #1f2937;
+  --g900: #111827;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+html,
+body,
+#app {
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: #f8fafc;
+  color: var(--g800);
+}
+
+/* ===== Login / standalone centered card ===== */
 .container {
   min-height: 100vh;
-  min-width: 100vw;
-  box-sizing: border-box;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%);
   padding: 4vh 0;
 }
 
@@ -19,32 +58,278 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
-.card-inner {
-  width: 100%;
-  max-width: 70vw;
-  align-self: flex-start;
+/* ===== App shell ===== */
+.app-shell {
+  min-height: 100vh;
 }
 
-.card-header {
+.app-navbar {
+  background: #fff;
+  border-bottom: 1px solid var(--g200);
+  height: 64px;
+  padding: 0 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
 }
 
-.card-title {
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--g900);
+  text-decoration: none;
+}
+
+.app-brand .logo {
+  font-size: 26px;
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-link {
+  padding: 8px 20px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--g600);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  background: var(--g100);
+  color: var(--g900);
+}
+
+.nav-link.active {
+  background: var(--g900);
+  color: #fff;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-menu-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  color: var(--g600);
+  transition: background 0.2s;
+}
+
+.mobile-menu-btn:hover {
+  background: var(--g100);
+}
+
+.mobile-nav {
+  display: none;
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--g200);
+  box-shadow: var(--shadow-lg);
+  flex-direction: column;
+  padding: 8px;
+  z-index: 99;
+}
+
+.mobile-nav-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--g700);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mobile-nav-link:hover {
+  background: var(--g100);
+}
+
+.mobile-nav-link.active {
+  background: var(--g900);
+  color: #fff;
+}
+
+.icon-btn-round {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
   font-size: 18px;
-  font-weight: 600;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--g600);
+  transition: background 0.2s;
 }
 
-.card-count {
-  margin-left: 8px;
-  font-size: 13px;
-  color: #8a919f;
+.icon-btn-round:hover {
+  background: var(--g100);
 }
 
-.card-actions {
+.admin-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 16px;
+  border: 1px solid var(--g200);
+  border-radius: 20px;
+  cursor: pointer;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g600);
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.admin-toggle:hover {
+  border-color: var(--warning);
+  color: #b45309;
+  background: var(--warning-bg);
+}
+
+.admin-toggle.on {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+}
+
+.admin-toggle .at-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--g400);
+}
+
+.admin-toggle.on .at-dot {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.user-avatar:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 32px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--g900);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: var(--g500);
+  margin: 6px 0 0;
+}
+
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 768px) {
+  .app-navbar {
+    padding: 0 14px;
+    height: 56px;
+  }
+
+  .app-brand .brand-text {
+    display: none;
+  }
+
+  .app-nav {
+    display: none;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .mobile-nav {
+    display: flex;
+  }
+
+  .admin-toggle .at-text {
+    display: none;
+  }
+
+  .admin-toggle {
+    padding: 7px 10px;
+  }
+
+  .page {
+    padding: 16px 12px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .page-subtitle {
+    font-size: 13px;
+  }
 }
