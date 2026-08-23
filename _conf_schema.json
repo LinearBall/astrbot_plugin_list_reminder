@@ -11,12 +11,6 @@
     "hint": "限制每个用户最多可以创建的任务数量",
     "default": 50
   },
-  "enable_personality": {
-    "description": "启用人格化回复",
-    "type": "bool",
-    "hint": "是否使用人格化设定生成回复消息",
-    "default": true
-  },
   "webui_port": {
     "description": "WebUI端口",
     "type": "int",

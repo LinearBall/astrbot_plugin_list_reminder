@@ -1,6 +1,29 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
-import { dateZhCN, zhCN, NConfigProvider, NDialogProvider, NLoadingBarProvider, NMessageProvider, NNotificationProvider } from 'naive-ui'
+import { onMounted } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
+import {
+  dateZhCN,
+  NConfigProvider,
+  NDialogProvider,
+  NLoadingBarProvider,
+  NMessageProvider,
+  NNotificationProvider,
+  zhCN,
+} from 'naive-ui';
+
+import AppNavbar from '@/components/AppNavbar.vue';
+import { useStore } from '@/composables/useStore';
+
+const router = useRouter();
+const route = useRoute();
+const { state, init } = useStore();
+
+onMounted(async () => {
+  await init();
+  if (!state.loggedIn && route.name !== 'login') {
+    router.push('/login');
+  }
+});
 </script>
 
 <template>
@@ -9,7 +32,13 @@ import { dateZhCN, zhCN, NConfigProvider, NDialogProvider, NLoadingBarProvider, 
       <NMessageProvider>
         <NDialogProvider>
           <NNotificationProvider>
-            <RouterView />
+            <template v-if="state.loggedIn && route.name !== 'login'">
+              <div class="app-shell">
+                <AppNavbar />
+                <RouterView />
+              </div>
+            </template>
+            <RouterView v-else />
           </NNotificationProvider>
         </NDialogProvider>
       </NMessageProvider>
