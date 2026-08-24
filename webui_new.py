@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import secrets
 from pathlib import Path
 from typing import Dict, List
@@ -121,10 +121,6 @@ class WebUIServer:
         Returns:
             推送使用的 umo 字符串；无法确定时返回空串。
         """
-        if owner and owner == current_sender:
-            umo = self.sender_id_2_umo.get(owner, "")
-            if umo:
-                return umo
         user = self.tm.user_db.get_user(owner) if self.tm else None
         if user and (user.umo or "").strip():
             return user.umo

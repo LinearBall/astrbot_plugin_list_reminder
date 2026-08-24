@@ -1,18 +1,24 @@
 ﻿<script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NIcon, useMessage } from 'naive-ui';
 import { LogOutFilled, MenuFilled } from '@vicons/material';
 
 import { logout } from '@/fbApi/apis';
 import { useStore } from '@/composables/useStore';
-import UserDropdown from '@/components/UserDropdown.vue';
 
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
-const { state, toggleAdminMode, reset } = useStore();
+const { state, toggleAdminMode, reset, nicknameOf } = useStore();
 const mobileMenuOpen = ref(false);
+
+const displayName = computed(
+  () => nicknameOf(state.me) || state.me,
+);
+const avatarChar = computed(() =>
+  displayName.value.charAt(0).toUpperCase(),
+);
 
 async function handleToggleAdmin() {
   try {
@@ -56,6 +62,9 @@ function isActive(name: string): boolean {
       <button class="nav-link" :class="{ active: isActive('calendar') }" @click="go('calendar')">
         任务日历
       </button>
+      <button class="nav-link" :class="{ active: isActive('user-manage') }" @click="go('user-manage')">
+        用户管理
+      </button>
     </div>
 
     <div class="nav-right">
@@ -68,7 +77,14 @@ function isActive(name: string): boolean {
         <span class="at-dot" />
         <span class="at-text">{{ state.isAdmin ? '管理员模式' : '个人模式' }}</span>
       </button>
-      <UserDropdown />
+      <button
+        class="user-avatar"
+        :class="{ active: isActive('user-manage') }"
+        title="用户管理"
+        @click="go('user-manage')"
+      >
+        {{ avatarChar }}
+      </button>
       <button class="icon-btn-round" title="退出登录" @click="handleLogout">
         <NIcon :size="18"><LogOutFilled /></NIcon>
       </button>
@@ -86,6 +102,9 @@ function isActive(name: string): boolean {
       </button>
       <button class="mobile-nav-link" :class="{ active: isActive('calendar') }" @click="go('calendar')">
         📅 任务日历
+      </button>
+      <button class="mobile-nav-link" :class="{ active: isActive('user-manage') }" @click="go('user-manage')">
+        👤 用户管理
       </button>
     </div>
   </nav>

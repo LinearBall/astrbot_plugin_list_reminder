@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
@@ -16,80 +16,43 @@ import {
 import {
   addUserTag,
   checkIfAlreadyLoggedIn,
-  getTagCatalogue,
-  getTodos,
   getUserDetail,
   removeUserTag,
   updateOwnNickname,
   updateUserUmo,
 } from '@/fbApi/apis.ts';
-import type { TagCatalogue, TagUser, Todo, UserDetail } from '@/types.ts';
+import { useStore } from '@/composables/useStore';
+import type { TagUser, UserDetail } from '@/types.ts';
 
 const router = useRouter();
 const message = useMessage();
+const { state, init, refreshTags } = useStore();
 
-const todos = ref<Todo[]>([]);
-const isAdmin = ref(false);
-const meSenderId = ref('');
-const tagCatalogue = ref<TagCatalogue | null>(null);
 const myNickname = ref('');
 const editingNickname = ref(false);
 const showDetail = ref(false);
 const detailUser = ref<UserDetail | null>(null);
 const editingUmo = ref(false);
 const detailUmo = ref('');
-const tagFilter = ref<string | null>(null);
+const editingOwnUmo = ref(false);
+const ownUmoDraft = ref('');
 
-const nicknameMap = computed<Record<string, string>>(() => {
-  const map: Record<string, string> = {};
-  tagCatalogue.value?.users.forEach((u) => {
-    map[u.sender_id] = u.nickname || u.sender_id;
-  });
-  return map;
-});
-
-const myDisplayNickname = computed(
-  () => nicknameMap.value[meSenderId.value] || meSenderId.value,
+const me = computed(
+  () => state.tagCatalogue?.users.find((u) => u.sender_id === state.me) ?? null,
 );
-
-const availableTodoTags = computed(() => {
-  const tags = new Set<string>();
-  todos.value.forEach((todo) => todo.tags.forEach((tag) => tags.add(tag)));
-  return Array.from(tags)
-    .sort()
-    .map((tag) => ({ label: tag, value: tag }));
-});
-
-const ownTags = computed(() => {
-  const me = tagCatalogue.value?.users.find(
-    (u) => u.sender_id === meSenderId.value,
-  );
-  return me ? me.tags : [];
-});
+const myDisplayNickname = computed(
+  () => me.value?.nickname || state.me,
+);
+const myUmo = computed(() => me.value?.umo || '');
+const ownTags = computed(() => me.value?.tags ?? []);
 
 watch(
-  () =>
-    tagCatalogue.value?.users.find(
-      (u) => u.sender_id === meSenderId.value,
-    )?.nickname,
+  () => me.value?.nickname,
   (nick) => {
     if (nick !== undefined) myNickname.value = nick;
   },
+  { immediate: true },
 );
-
-function refreshTodos() {
-  getTodos().then((newTodos) => {
-    todos.value = newTodos;
-    if (
-      tagFilter.value &&
-      !availableTodoTags.value.some(
-        (option) => option.value === tagFilter.value,
-      )
-    ) {
-      tagFilter.value = null;
-    }
-  });
-}
 
 function saveUserUmo() {
   if (!detailUser.value) return;
@@ -111,12 +74,6 @@ function saveUserUmo() {
   });
 }
 
-function refreshTags() {
-  getTagCatalogue().then((cat) => {
-    tagCatalogue.value = cat;
-  });
-}
-
 function saveMyNickname() {
   const nick = myNickname.value.trim();
   if (!nick) {
@@ -131,6 +88,33 @@ function saveMyNickname() {
       refreshTags();
     } else {
       message.error(res.payload['message'] || '修改昵称失败');
+    }
+  });
+}
+
+async function startEditOwnUmo() {
+  const detail = await getUserDetail(state.me);
+  if (!detail) {
+    message.error('获取用户信息失败');
+    return;
+  }
+  ownUmoDraft.value = detail.umo;
+  editingOwnUmo.value = true;
+}
+
+function saveOwnUmo() {
+  const umo = ownUmoDraft.value.trim();
+  if (!umo) {
+    message.error('umo 不能为空');
+    return;
+  }
+  updateUserUmo({ sender_id: state.me, umo }).then((res) => {
+    if (res.code === 200) {
+      message.success('umo 已更新');
+      editingOwnUmo.value = false;
+      refreshTags();
+    } else {
+      message.error(res.payload['message'] || '修改 umo 失败');
     }
   });
 }
@@ -176,19 +160,15 @@ function onOwnTagsUpdated(newTags: string[]) {
   const oldSet = new Set(ownTags.value);
   const added = newTags.filter((t) => !oldSet.has(t));
   const removed = ownTags.value.filter((t) => !newTags.includes(t));
-  added.forEach((t) => addTagToUser(meSenderId.value, t));
-  removed.forEach((t) => removeTagFromUser(meSenderId.value, t));
+  added.forEach((t) => addTagToUser(state.me, t));
+  removed.forEach((t) => removeTagFromUser(state.me, t));
 }
 
 onMounted(async () => {
-  const me = await checkIfAlreadyLoggedIn();
-  if (me === null) {
+  await init();
+  if (!(await checkIfAlreadyLoggedIn())) {
     router.push('/login');
   }
-  meSenderId.value = me ? me.sender_id : '';
-  isAdmin.value = me ? me.is_admin : false;
-  refreshTodos();
-  refreshTags();
 });
 </script>
 
@@ -199,7 +179,7 @@ onMounted(async () => {
         <h1 class="page-title">用户管理</h1>
         <p class="page-subtitle">
           {{
-            isAdmin
+            state.isAdmin
               ? '管理所有用户的昵称、标签与推送配置'
               : '管理你的个人信息与标签'
           }}
@@ -208,7 +188,7 @@ onMounted(async () => {
       <NButton quaternary @click="router.back()">返回</NButton>
     </div>
 
-    <div v-if="!isAdmin" class="um-card">
+    <div v-if="!state.isAdmin" class="um-card">
       <div class="um-section">
         <div class="um-label">昵称</div>
         <div class="um-nick-row">
@@ -222,7 +202,7 @@ onMounted(async () => {
             @blur="saveMyNickname"
           />
           <template v-else>
-            <NButton text type="primary" @click="openUserDetail(meSenderId)">
+            <NButton text type="primary" @click="openUserDetail(state.me)">
               {{ myDisplayNickname }}
             </NButton>
             <NButton
@@ -238,6 +218,24 @@ onMounted(async () => {
         <div class="um-hint">点击昵称查看详情，点"编辑昵称"可修改自己的昵称</div>
       </div>
       <div class="um-section">
+        <div class="um-label">推送会话 UMO</div>
+        <div v-if="editingOwnUmo" class="umo-editor">
+          <NInput
+            v-model:value="ownUmoDraft"
+            size="small"
+            placeholder="输入新 umo"
+            @keyup.enter="saveOwnUmo"
+          />
+          <NButton size="tiny" quaternary type="primary" @click="saveOwnUmo">保存</NButton>
+          <NButton size="tiny" quaternary @click="editingOwnUmo = false">取消</NButton>
+        </div>
+        <div v-else class="um-nick-row">
+          <span class="um-mono">{{ myUmo || '（未设置）' }}</span>
+          <NButton size="tiny" quaternary type="info" @click="startEditOwnUmo">编辑</NButton>
+        </div>
+        <div class="um-hint">到期提醒将发送到此会话；修改后新建任务立即生效</div>
+      </div>
+      <div class="um-section">
         <div class="um-label">我的标签</div>
         <NDynamicTags
           :value="ownTags"
@@ -248,16 +246,16 @@ onMounted(async () => {
 
     <div v-else class="um-card">
       <NEmpty
-        v-if="!tagCatalogue || tagCatalogue.users.length === 0"
+        v-if="!state.tagCatalogue || state.tagCatalogue.users.length === 0"
         description="暂无用户"
         style="padding: 40px"
       />
       <div v-else class="um-user-list">
         <div
-          v-for="user in tagCatalogue.users"
+          v-for="user in state.tagCatalogue.users"
           :key="user.sender_id"
           class="um-user-row"
-          :class="{ 'is-me': user.sender_id === meSenderId }"
+          :class="{ 'is-me': user.sender_id === state.me }"
         >
           <div class="um-user-info">
             <div class="um-avatar">
@@ -265,7 +263,7 @@ onMounted(async () => {
             </div>
             <div class="um-user-meta">
               <div class="um-user-nick">
-                <template v-if="user.sender_id === meSenderId">
+                <template v-if="user.sender_id === state.me">
                   <NInput
                     v-if="editingNickname"
                     v-model:value="myNickname"
@@ -425,6 +423,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .um-hint {
@@ -546,10 +545,6 @@ onMounted(async () => {
 
   .um-section {
     padding: 16px;
-  }
-
-  .um-card :deep(.n-card) {
-    width: 95vw !important;
   }
 }
 </style>
