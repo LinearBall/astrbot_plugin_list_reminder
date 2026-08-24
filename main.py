@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import re
 from datetime import datetime, timedelta
@@ -83,7 +83,9 @@ class ListReminderPlugin(Star):
                 yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化")
                 return
             else:
-                yield event.plain_result("⚠️ 请通过私聊发送该命令进行初始化，当前使用群聊会话umo作为临时记录")
+                yield event.plain_result(
+                    "⚠️ 请通过私聊发送该命令进行初始化，当前使用群聊会话umo作为临时记录"
+                )
         else:
             yield event.plain_result("✅ 初始化成功，已记录您的私聊会话umo")
         self.todo_manager.user_db.add_or_update_user(sender_id, umo, is_admin=is_admin)
@@ -149,7 +151,9 @@ class ListReminderPlugin(Star):
         key = self.server.issue_login_key(sender_id)
         self.server.register_umo_to_sender(sender_id, event.unified_msg_origin)
 
-        msg = f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/?key={key}\n"
+        msg = (
+            f"✅ 后台已就绪\n访问地址: http://localhost:{self.webui_port}/?key={key}\n"
+        )
         if self.public_ip:
             msg += f"公网地址: http://{self.public_ip}:{self.webui_port}/?key={key}\n"
         else:
@@ -167,21 +171,69 @@ class ListReminderPlugin(Star):
         # group_id = event.get_group_id()
         # yield event.plain_result(f"收到消息：{msg}，来自 sender_id: {sender_id}, group_id: {group_id}, umo: {umo}")
 
-        # 使用LLM判断是否为提醒意图
-        if not await self._is_reminder_intent(msg, event):
+        # 使用LLM判断任务意图：0=无关，1=创建，2=按标签批量删除
+        intent = await self._is_reminder_intent(msg, event)
+        if intent == 0:
             return
 
-        # 使用LLM提取任务信息
+        if intent == 2:
+            tag = await self._extract_delete_tag(msg, event)
+            if not tag:
+                yield event.plain_result("❌ 无法识别要删除的任务标签")
+                return
+            deleted = self.todo_manager.delete_todos_by_creator_and_tag(sender_id, tag)
+            if deleted == 0:
+                yield event.plain_result(f"❌ 没有找到带有「{tag}」标签的任务")
+            else:
+                yield event.plain_result(
+                    f"🗑️ 已删除 {deleted} 个带有「{tag}」标签的任务"
+                )
+            return
+
+        # intent == 1：创建任务
         task_info = await self._extract_task(msg, event)
         if task_info is None:
+            return
+        if not task_info.get("content"):
+            yield event.plain_result("❌ 无法识别任务内容")
             return
         if not task_info.get("time"):
             yield event.plain_result("❌ 无法识别时间，请明确提醒时间")
             return
 
-        # 创建任务
         due_timestamp = datetime.fromisoformat(task_info["time"])
         task_tags = task_info.get("tags") or []
+        user_tags = [
+            t.strip()
+            for t in (task_info.get("user_tags") or [])
+            if isinstance(t, str) and t.strip()
+        ]
+
+        if user_tags:
+            total_created = 0
+            missing_tags: list[str] = []
+            for user_tag in user_tags:
+                matched, created = self.todo_manager.create_todos_for_tagged_users(
+                    user_tag=user_tag,
+                    content=task_info["content"],
+                    due_time=due_timestamp.timestamp(),
+                    tags=task_tags,
+                )
+                total_created += created
+                if matched == 0:
+                    missing_tags.append(user_tag)
+            if total_created == 0:
+                yield event.plain_result("❌ 任务创建失败，未找到任何目标用户")
+                return
+            tag_hint = (" #" + " #".join(task_tags)) if task_tags else ""
+            lines = [
+                f"✅ 已为 {total_created} 名用户创建任务：{task_info['content']}{tag_hint}"
+            ]
+            if missing_tags:
+                lines.append("⚠️ 未找到带标签的用户：" + "、".join(missing_tags))
+            yield event.plain_result("\n".join(lines))
+            return
+
         task_id = self.todo_manager.create_todo(
             creator=sender_id,
             umo=umo,
@@ -196,42 +248,47 @@ class ListReminderPlugin(Star):
         else:
             yield event.plain_result("❌ 任务创建失败")
 
-    async def _is_reminder_intent(self, msg: str, event: AstrMessageEvent) -> bool:
-        """Use LLM to determine if the message is a reminder/task scheduling intent.
+    async def _is_reminder_intent(self, msg: str, event: AstrMessageEvent) -> int:
+        """Classify the message into a reminder-management action.
 
         Returns:
-            True if the message is setting a reminder/task, False otherwise.
+            0 if the message is unrelated,
+            1 to create a task,
+            2 to batch-delete tasks by tag.
         """
-        # 如果是用户指令不执行解析
-        if msg.lstrip().startswith("/"):
-            return False
+        # Built-in commands are handled by the command group. The waking
+        # stage has already stripped the leading wake prefix (e.g. "/").
+        if "/列表提醒" in msg:
+            return 0
         try:
-            provider_id = self.schedule_detection_provider_id
-            if not provider_id:
-                provider_id = (
-                    self.schedule_detection_provider_id
-                    or await self.context.get_current_chat_provider_id(
-                        umo=event.unified_msg_origin
-                    )
+            provider_id = (
+                self.schedule_detection_provider_id
+                or await self.context.get_current_chat_provider_id(
+                    umo=event.unified_msg_origin
                 )
+            )
+            if not provider_id:
+                return 0
 
             system_prompt = (
-                "判断用户消息是否是在设定提醒、任务或日程安排。"
-                "返回 true 或 false\n\n"
+                "判断用户消息属于哪一种任务管理意图，只返回一个数字：\n"
+                "1 - 创建或安排提醒/任务（包括提醒某个部门、群组或标签的人）。\n"
+                "2 - 按任务标签批量删除任务（如“删除所有会议标签的任务”）。\n"
+                "0 - 其他与任务管理无关的消息。\n\n"
                 "示例：\n"
                 "消息：提醒我明天下午3点开会\n"
-                "true\n\n"
-                "消息：后天上午10点记得交报告\n"
-                "true\n\n"
-                "消息：安排下周一早上9点半的团队会议\n"
-                "true\n\n"
-                "消息：别忘了吃饭\n"
-                "false\n\n"
+                "1\n\n"
+                "消息：提醒工程一部的人这周四上午9点有个讨论会，标签 会议\n"
+                "1\n\n"
+                "消息：删除所有有会议标签的任务\n"
+                "2\n\n"
+                "消息：把工作标签的待办都删掉\n"
+                "2\n\n"
                 "消息：今天天气怎么样\n"
-                "false\n\n"
+                "0\n\n"
                 "消息：帮我查一下快递\n"
-                "false\n\n"
-                "仅返回 true 或 false。"
+                "0\n\n"
+                "仅返回数字 0、1 或 2。"
             )
 
             resp = await self.context.llm_generate(
@@ -240,17 +297,14 @@ class ListReminderPlugin(Star):
                 prompt=msg,
             )
             if not resp or not resp.completion_text:
-                return False
+                return 0
 
             text = resp.completion_text.strip()
-            # 如果回答中含有true就返回true，否则返回false
-            if "true" in text:
-                return True
-            else:
-                return False
+            match = re.search(r"[012]", text)
+            return int(match.group()) if match else 0
         except Exception as e:
             logger.error(f"判断提醒意图失败: {e}")
-            return False
+            return 0
 
     async def _extract_task(self, msg: str, event: AstrMessageEvent) -> dict | None:
         """Use LLM to extract task content and time, with dateutil fallback.
@@ -279,24 +333,28 @@ class ListReminderPlugin(Star):
             tomorrow = now + timedelta(days=1)
             day_after = now + timedelta(days=2)
             next_monday = now + timedelta(days=(7 - now.weekday()))
+            this_thursday = now + timedelta(days=(3 - now.weekday()) % 7)
 
             system_prompt = (
                 f"你是一个日程解析助手。当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}"
                 f"（{weekday_name}，Asia/Shanghai）。\n\n"
                 "从用户消息中提取提醒任务信息，返回 JSON，格式如下：\n"
-                '{"content": "任务内容简述", "date_str": "2026-07-11T15:00:00", "tags": []}\n\n'
+                '{"content": "任务内容简述", "date_str": "2026-07-11T15:00:00", "tags": [], "user_tags": []}\n\n'
                 "规则：\n"
                 "- content：任务内容，简洁明了，不要包含标签。\n"
                 "- date_str：提醒时间，ISO 格式（基于上方当前时间换算）。如果用户没有指定时间，设为空字符串。\n"
-                "- tags：任务自身的标签列表（如「工作」「重要」「生日」）。用户显式用「标签：xxx」「打标签 xxx」等方式指明时提取；没有则返回空数组。\n"
+                "- tags：任务自身的标签列表（如「工作」「重要」「会议」）。用户显式用「标签：xxx」「打标签 xxx」等方式指明时提取；没有则返回空数组。\n"
+                "- user_tags：人员/部门标签列表。当用户要求提醒某部门、某群组或「带某标签的人」时提取标签名（如「工程一部的人」 -> [「工程一部」]）；没有则返回空数组。\n"
                 "- 如果用户说「明天」、「后天」、「下周一」、「X小时后」等相对时间，基于当前时间计算绝对日期。\n\n"
                 "示例：\n"
                 f"消息：提醒我明天下午3点开会\n"
-                f'{{"content": "开会", "date_str": "{tomorrow.strftime("%Y-%m-%dT15:00:00")}", "tags": []}}\n\n'
+                f'{{"content": "开会", "date_str": "{tomorrow.strftime("%Y-%m-%dT15:00:00")}", "tags": [], "user_tags": []}}\n\n'
                 f"消息：后天上午10点记得交报告，标签：工作\n"
-                f'{{"content": "交报告", "date_str": "{day_after.strftime("%Y-%m-%dT10:00:00")}", "tags": ["工作"]}}\n\n'
+                f'{{"content": "交报告", "date_str": "{day_after.strftime("%Y-%m-%dT10:00:00")}", "tags": ["工作"], "user_tags": []}}\n\n'
                 f"消息：安排下周一早上9点半的团队会议，打标签：重要、会议\n"
-                f'{{"content": "团队会议", "date_str": "{next_monday.strftime("%Y-%m-%dT09:30:00")}", "tags": ["重要", "会议"]}}\n\n'
+                f'{{"content": "团队会议", "date_str": "{next_monday.strftime("%Y-%m-%dT09:30:00")}", "tags": ["重要", "会议"], "user_tags": []}}\n\n'
+                f"消息：提醒工程一部的人这周四上午9点有个讨论会，标签 会议\n"
+                f'{{"content": "讨论会", "date_str": "{this_thursday.strftime("%Y-%m-%dT09:00:00")}", "tags": ["会议"], "user_tags": ["工程一部"]}}\n\n'
                 "仅返回 JSON，不要其他内容。"
             )
 
@@ -324,15 +382,31 @@ class ListReminderPlugin(Star):
             content = result.get("content", "").strip()
             date_str = result.get("date_str", "").strip()
             tags = result.get("tags") or []
+            raw_user_tags = result.get("user_tags") or []
+            user_tags = [
+                tag.strip()
+                for tag in raw_user_tags
+                if isinstance(tag, str) and tag.strip()
+            ]
 
             if not content or not date_str:
-                return {"content": content, "time": "", "tags": tags}
+                return {
+                    "content": content,
+                    "time": "",
+                    "tags": tags,
+                    "user_tags": user_tags,
+                }
 
             # 验证并标准化时间
             try:
                 parsed = datetime.fromisoformat(date_str)
                 if parsed.year < 2024 or parsed.year > 2100:
-                    return {"content": content, "time": ""}
+                    return {
+                        "content": content,
+                        "time": "",
+                        "tags": tags,
+                        "user_tags": user_tags,
+                    }
                 task_time = parsed.isoformat()
             except (ValueError, TypeError):
                 # dateutil 兜底解析
@@ -342,10 +416,65 @@ class ListReminderPlugin(Star):
                         parsed = parsed.replace(year=now.year)
                     task_time = parsed.isoformat()
                 except (ValueError, TypeError):
-                    return {"content": content, "time": ""}
+                    return {
+                        "content": content,
+                        "time": "",
+                        "tags": tags,
+                        "user_tags": user_tags,
+                    }
 
-            return {"content": content, "time": task_time, "tags": tags}
+            return {
+                "content": content,
+                "time": task_time,
+                "tags": tags,
+                "user_tags": user_tags,
+            }
 
         except Exception as e:
             logger.error(f"提取任务失败: {e}")
             return None
+
+    async def _extract_delete_tag(self, msg: str, event: AstrMessageEvent) -> str:
+        """Extract the todo tag to delete from a batch-delete request.
+
+        Args:
+            msg: Raw user message.
+            event: Message event used to resolve the LLM provider.
+
+        Returns:
+            The tag name, or an empty string when no tag is identified.
+        """
+        try:
+            provider_id = (
+                self.schedule_detection_provider_id
+                or await self.context.get_current_chat_provider_id(
+                    umo=event.unified_msg_origin
+                )
+            )
+            if not provider_id:
+                return ""
+
+            system_prompt = (
+                "从用户消息中提取要批量删除的任务标签名称。\n"
+                "只返回标签名称本身，不要引号、标点或解释。若没有明确的标签，返回空字符串。\n\n"
+                "示例：\n"
+                "消息：删除所有有会议标签的任务\n"
+                "会议\n\n"
+                "消息：把工作标签的待办都删掉\n"
+                "工作\n\n"
+                "消息：清空带重要标签的提醒\n"
+                "重要"
+            )
+
+            resp = await self.context.llm_generate(
+                chat_provider_id=provider_id,
+                system_prompt=system_prompt,
+                prompt=msg,
+            )
+            if not resp or not resp.completion_text:
+                return ""
+
+            return resp.completion_text.strip().strip('"“”‘’').strip()
+        except Exception as e:
+            logger.error(f"提取删除标签失败: {e}")
+            return ""
