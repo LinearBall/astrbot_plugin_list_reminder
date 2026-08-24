@@ -261,3 +261,37 @@ class TodoDB:
                 f"DELETE FROM Todos WHERE todo_id IN ({placeholders})", todo_ids
             )
         return len(todo_ids)
+
+    def delete_todos_by_creator_and_tag(self, creator: str, tag: str) -> int:
+        """Delete all todos created by a user that carry the given tag.
+
+        Args:
+            creator: Creator sender_id.
+            tag: Todo tag name.
+
+        Returns:
+            Number of deleted todos.
+        """
+        with self.dbm.get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT tt.todo_id
+                FROM TodoTags as tt
+                JOIN Tags as t ON t.tag_id = tt.tag_id
+                JOIN Todos as td ON td.todo_id = tt.todo_id
+                WHERE td.creator = ? AND t.name = ?
+                """,
+                (creator, tag),
+            )
+            todo_ids = [row[0] for row in cursor.fetchall()]
+            if not todo_ids:
+                return 0
+            placeholders = ",".join("?" * len(todo_ids))
+            cursor.execute(
+                f"DELETE FROM TodoTags WHERE todo_id IN ({placeholders})", todo_ids
+            )
+            cursor.execute(
+                f"DELETE FROM Todos WHERE todo_id IN ({placeholders})", todo_ids
+            )
+        return len(todo_ids)

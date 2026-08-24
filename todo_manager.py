@@ -174,3 +174,58 @@ class TodoManager:
         for task in tasks_to_clear:
             del self.active_timers[task.todo_id]
         self.db.delete_todos_by_sender_id(sender_id)
+
+    def create_todos_for_tagged_users(
+        self,
+        user_tag: str,
+        content: str,
+        due_time: float,
+        tags: List[str] | None = None,
+    ) -> tuple[int, int]:
+        """Create a todo for every user carrying `user_tag`.
+
+        Each created todo is owned by the matched user and is reminded through
+        that user's private-chat umo. Countdown timers are scheduled normally.
+
+        Args:
+            user_tag: User tag to match (case-insensitive).
+            content: Todo content.
+            due_time: Due timestamp in seconds.
+            tags: Todo tags to attach to each created todo.
+
+        Returns:
+            A tuple of (matched user count, successfully created todo count).
+        """
+        users = self.user_db.get_users_by_tag(user_tag)
+        created_count = 0
+        for user in users:
+            todo_id = self.create_todo(
+                creator=user.sender_id,
+                umo=user.umo,
+                content=content,
+                due_time=due_time,
+                tags=tags,
+            )
+            if todo_id >= 0:
+                created_count += 1
+        return len(users), created_count
+
+    def delete_todos_by_creator_and_tag(self, creator: str, tag: str) -> int:
+        """Delete all pending/finished todos owned by `creator` carrying `tag`.
+
+        Any active countdown timers for the deleted todos are cancelled.
+
+        Args:
+            creator: Creator sender_id.
+            tag: Todo tag name.
+
+        Returns:
+            Number of deleted todos.
+        """
+        for todo in self.db.get_todos_by_tag(tag):
+            if todo.creator != creator:
+                continue
+            timer = self.active_timers.pop(todo.todo_id, None)
+            if timer and not timer.done():
+                timer.cancel()
+        return self.db.delete_todos_by_creator_and_tag(creator, tag)
